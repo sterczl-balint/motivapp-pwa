@@ -11,7 +11,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png?v=7" type="image/png" />
     <link rel="apple-touch-icon" href="./icons/icon-180.png?v=7" />
-    <link rel="stylesheet" href="./styles.css?v=20" />
+    <link rel="stylesheet" href="./styles.css?v=21" />
     <script src="./vendor/lucide.min.js?v=1" defer></script>
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
@@ -106,7 +106,6 @@
           <div class="page-heading">
             <h1 id="competitions-title">Versenyek<span class="heading-dot">.</span></h1>
           </div>
-          <div id="sport-chips" class="sport-chips" hidden></div>
           <div id="competition-state" class="competition-state neumorph-card" aria-live="polite" hidden>
             <i class="offline-icon" data-lucide="wifi-off" aria-hidden="true"></i>
             <h2 id="competition-message">Nincs internetkapcsolat</h2>
@@ -114,6 +113,9 @@
             <button id="retry-connection" class="secondary-button" type="button"><i data-lucide="refresh-cw"></i> Újrapróbálás</button>
           </div>
           <p id="competition-empty" class="competition-empty" aria-live="polite"></p>
+          <p id="competition-status" class="competition-status" aria-live="polite" hidden></p>
+          <button id="competition-retry" class="secondary-button competition-retry" type="button" hidden><i data-lucide="refresh-cw"></i> Újrapróbálás</button>
+          <div id="competition-events" class="competition-events" hidden></div>
         </section>
 
         <section id="screen-progress" class="screen" aria-labelledby="progress-title" hidden>
@@ -192,10 +194,13 @@
       <section id="sport-picker" class="sport-picker" role="dialog" aria-modal="true" aria-labelledby="sport-picker-title">
         <div class="sheet-handle" aria-hidden="true"></div>
         <div class="form-heading"><h3 id="sport-picker-title">Sportág hozzáadása</h3><button id="close-sport-picker" class="icon-button close-button" type="button" aria-label="Bezárás"><i data-lucide="x"></i></button></div>
+        <p id="selected-sports-label" class="picker-section-label" hidden>Kiválasztott sportágak</p>
+        <div id="sport-chips" class="sport-chips" hidden></div>
+        <p class="picker-section-label">Választható sportágak</p>
         <div id="sport-picker-list" class="sport-picker-list"></div>
       </section>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=17" defer></script>
+    <script src="./app.js?v=21" defer></script>
   </body>
 </html>

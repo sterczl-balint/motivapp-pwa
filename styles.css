@@ -589,8 +589,24 @@ h1 {
   font-size: 14px;
 }
 .competition-empty[hidden] { display: none; }
+.competition-empty a, .competition-status a { display: inline-flex; margin-top: 11px; align-items: center; gap: 6px; color: var(--cyan); font-weight: 650; text-decoration: none; }
+.competition-status { margin: 18px 0 12px; color: var(--muted); font-size: 14px; line-height: 1.6; text-align: center; }
+.competition-status[hidden], .competition-retry[hidden], .competition-events[hidden] { display: none; }
+.competition-retry { margin: 0 auto 14px; }
+.competition-events { display: grid; gap: 12px; margin: 13px 0 25px; }
+.competition-source { display: flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; color: var(--cyan); font-size: 12px; font-weight: 650; text-decoration: none; }
+.competition-source svg { width: 15px; height: 15px; }
+.competition-card { padding: 17px 18px; border-radius: 20px; }
+.competition-card time { display: block; margin-bottom: 8px; color: var(--mint); font-size: 13px; font-weight: 700; }
+.competition-card h2 { margin: 0; color: var(--text); font-size: 16px; line-height: 1.4; }
+.competition-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.competition-location { display: flex; margin: 10px 0 0; align-items: flex-start; gap: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.competition-location svg { width: 15px; height: 15px; flex: 0 0 auto; color: var(--cyan); }
+.competition-card-link { display: inline-flex; margin-top: 12px; align-items: center; gap: 5px; color: var(--cyan); font-size: 12px; font-weight: 650; text-decoration: none; }
+.competition-card-link svg { width: 15px; height: 15px; }
 .sport-chips { display: flex; flex-wrap: wrap; gap: 9px; margin: 8px 0 19px; }
 .sport-chips[hidden] { display: none; }
+.picker-section-label { margin: 17px 0 9px; color: var(--muted); font-size: 12px; font-weight: 650; }
 .selected-sport-chip {
   display: inline-flex;
   min-height: 34px;
@@ -687,7 +703,7 @@ body.sheet-open { overflow: hidden; }
 .bottom-nav {
   z-index: 4;
   position: fixed;
-  bottom: calc(13px + env(safe-area-inset-bottom));
+  bottom: calc(13px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   display: block;
   width: min(calc(100% - 24px), 480px);
@@ -760,7 +776,7 @@ body.keyboard-open .bottom-nav { display: none; }
   z-index: 10;
   position: fixed;
   right: 20px;
-  bottom: calc(96px + env(safe-area-inset-bottom));
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   left: 20px;
   width: fit-content;
   max-width: min(440px, calc(100% - 40px));

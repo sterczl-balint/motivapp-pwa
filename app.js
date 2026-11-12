@@ -18,6 +18,43 @@ const SPORTS = [
   "Szlalom kajak-kenu",
   "Kajakpóló"
 ];
+const SPORT_OPTIONS = {
+  "Foci": { label: "Foci", icon: "goal", source: "football" },
+  "Jégkorong": { label: "Jégkorong", icon: "goal", source: "hockey" },
+  "Síkvízi kajak-kenu": { label: "Kajak", icon: "waves", source: "canoe" },
+  "Evezés": { label: "Evezés", icon: "sailboat", source: "rowing" },
+  "Vízilabda": { label: "Vízilabda", icon: "waves", source: "water-polo" },
+  "Szlalom kajak-kenu": { label: "Szlalom", icon: "waves", source: "canoe" },
+  "Kajakpóló": { label: "Kajakpóló", icon: "waves", source: "canoe" }
+};
+const COMPETITION_SOURCES = {
+  football: {
+    name: "MLSZ · OTP Bank Liga",
+    url: "https://adatbank.mlsz.hu/",
+    readerUrl: "https://r.jina.ai/http://adatbank.mlsz.hu/"
+  },
+  hockey: {
+    name: "MJSZ versenynaptár",
+    url: "https://www.jegkorongszovetseg.hu/versenynaptar",
+    readerUrl: "https://r.jina.ai/http://www.jegkorongszovetseg.hu/versenynaptar"
+  },
+  canoe: {
+    name: "Magyar Kajak-Kenu Szövetség",
+    url: "https://kajakkenusport.hu/naptar",
+    readerUrl: "https://r.jina.ai/http://kajakkenusport.hu/naptar"
+  },
+  rowing: {
+    name: "Magyar Evezős Szövetség",
+    url: "https://www.hunrowing.hu/verseny/lista/",
+    readerUrl: "https://r.jina.ai/http://www.hunrowing.hu/verseny/lista/?ical=1"
+  },
+  "water-polo": {
+    name: "Magyar Vízilabda Szövetség",
+    url: "https://waterpolo.hu/",
+    readerUrl: "https://r.jina.ai/http://waterpolo.hu/"
+  }
+};
+const COMPETITION_CACHE_DURATION = 15 * 60 * 1000;
 const defaults = {
   profile: {
     email: "",
@@ -160,6 +197,9 @@ let lastMainScreen = "training";
 let currentTrainingTab = "timer";
 let currentProgressTab = "chart";
 let currentCompetitionTab = "add-sport";
+let competitionRequestId = 0;
+const competitionCache = new Map();
+const competitionLoads = new Map();
 
 function showScreen(screenName) {
   const validScreens = ["training", "competitions", "progress", "profile"];
@@ -215,6 +255,17 @@ const BOTTOM_TABS = {
 };
 
 function getBottomTabs(screen) {
+  if (screen === "competitions") {
+    return [
+      ...data.sports.map((sport) => ({
+        key: `sport:${sport}`,
+        label: SPORT_OPTIONS[sport].label,
+        accessibleLabel: sport,
+        icon: SPORT_OPTIONS[sport].icon
+      })),
+      { key: "add-sport", label: "", accessibleLabel: "Sportág hozzáadása", icon: "plus" }
+    ];
+  }
   return BOTTOM_TABS[screen] || [];
 }
 
@@ -233,16 +284,16 @@ function renderBottomTabs(screen) {
   }
   const isTraining = screen === "training";
   const selectedTab = isTraining ? currentTrainingTab
-    : screen === "progress" ? currentProgressTab : "add-sport";
+    : screen === "progress" ? currentProgressTab : currentCompetitionTab;
   const selectedIndex = tabs.findIndex((tab) => tab.key === selectedTab);
   nav.hidden = false;
   nav.setAttribute("aria-label", isTraining
     ? "Edzési eszközök"
-    : screen === "progress" ? "Fejlődési nézetek" : "Sportág hozzáadása");
+    : screen === "progress" ? "Fejlődési nézetek" : "Versenysportágak");
   nav.style.setProperty("--segments", String(tabs.length));
   nav.style.setProperty("--segment", String(Math.max(0, selectedIndex)));
   nav.innerHTML = `<div class="bottom-nav-track"><span class="segment-pill" aria-hidden="true"></span>${tabs.map((tab) => `
-    <button class="segment-button bottom-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-bottom-tab="${escapeHTML(tab.key)}" aria-label="${escapeHTML(tab.label)}" aria-pressed="${tab.key === selectedTab}" title="${escapeHTML(tab.label)}">
+    <button class="segment-button bottom-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-bottom-tab="${escapeHTML(tab.key)}" aria-label="${escapeHTML(tab.accessibleLabel || tab.label)}" aria-pressed="${tab.key === selectedTab}" title="${escapeHTML(tab.accessibleLabel || tab.label)}">
       <i class="segment-icon" data-lucide="${tab.icon}" aria-hidden="true"></i><span>${escapeHTML(tab.label)}</span>
     </button>`).join("")}</div>`;
   renderLucide(nav);
@@ -278,36 +329,34 @@ $("#bottom-nav").addEventListener("click", (event) => {
     currentProgressTab = bottomTab;
     PROGRESS_TABS.forEach((tab) => { $(`#progress-${tab}`).hidden = tab !== bottomTab; });
     if (bottomTab === "chart") renderProgress();
-  } else if (currentScreen === "competitions" && bottomTab === "add-sport") {
-    currentCompetitionTab = "add-sport";
-    openSportPicker();
+  } else if (currentScreen === "competitions") {
+    if (bottomTab === "add-sport") {
+      openSportPicker();
+      return;
+    }
+    currentCompetitionTab = bottomTab;
+    renderBottomTabs("competitions");
+    renderCompetitionState();
   }
 });
 
 function renderSports() {
   const activeSport = data.sports.find((sport) => `sport:${sport}` === currentCompetitionTab);
   if (!activeSport) currentCompetitionTab = data.sports.length ? `sport:${data.sports[0]}` : "add-sport";
-  const sportIcons = {
-    "Foci": "goal",
-    "Jégkorong": "goal",
-    "Síkvízi kajak-kenu": "waves",
-    "Evezés": "sailboat",
-    "Vízilabda": "waves",
-    "Szlalom kajak-kenu": "waves",
-    "Kajakpóló": "waves"
-  };
   $("#sport-chips").innerHTML = data.sports.map((sport) => `
     <span class="selected-sport-chip">
       <button class="sport-chip-select${currentCompetitionTab === `sport:${sport}` ? " active" : ""}" type="button" data-select-sport="${escapeHTML(sport)}" aria-pressed="${currentCompetitionTab === `sport:${sport}`}">
-        <i data-lucide="${sportIcons[sport]}" aria-hidden="true"></i>${escapeHTML(sport)}
+        <i data-lucide="${SPORT_OPTIONS[sport].icon}" aria-hidden="true"></i>${escapeHTML(sport)}
       </button>
       <button class="sport-chip-remove" type="button" data-remove-sport="${escapeHTML(sport)}" aria-label="${escapeHTML(sport)} eltávolítása"><i data-lucide="x"></i></button>
     </span>`).join("");
+  $("#sport-chips").hidden = data.sports.length === 0;
+  $("#selected-sports-label").hidden = data.sports.length === 0;
   const available = SPORTS.filter((sport) => !data.sports.includes(sport));
   $("#sport-picker-list").innerHTML = available.length
     ? available.map((sport) => `
       <button class="sport-option" type="button" data-add-sport="${escapeHTML(sport)}">
-        <i data-lucide="${sportIcons[sport]}" aria-hidden="true"></i><span>${escapeHTML(sport)}</span><i data-lucide="plus" aria-hidden="true"></i>
+        <i data-lucide="${SPORT_OPTIONS[sport].icon}" aria-hidden="true"></i><span>${escapeHTML(sport)}</span><i data-lucide="plus" aria-hidden="true"></i>
       </button>`).join("")
     : '<p class="sport-picker-empty">Minden sportág hozzá van adva.</p>';
   renderLucide($("#sport-chips"));
@@ -428,16 +477,302 @@ async function updateConnection() {
 function renderCompetitionState() {
   if (!$("#competition-empty")) return;
   $("#competition-state").hidden = internetAvailable;
-  $("#sport-chips").hidden = !internetAvailable || data.sports.length === 0;
-  $("#competition-empty").hidden = !internetAvailable;
-  if (!internetAvailable) return;
-  $("#competition-empty").textContent = data.sports.length === 0
-    ? "Még nincsenek sportok kiválasztva."
-    : "Nincsenek versenyek.";
+  $("#competition-events").hidden = true;
+  $("#competition-status").hidden = true;
+  $("#competition-retry").hidden = true;
+  if (!internetAvailable) {
+    competitionRequestId += 1;
+    $("#competition-empty").hidden = true;
+    return;
+  }
+  if (data.sports.length === 0) {
+    competitionRequestId += 1;
+    $("#competition-empty").hidden = false;
+    $("#competition-empty").textContent = "Még nincsenek sportok kiválasztva.";
+    return;
+  }
+  $("#competition-empty").hidden = true;
+  if (lastMainScreen !== "competitions") return;
+  const activeSport = data.sports.find((sport) => `sport:${sport}` === currentCompetitionTab) || data.sports[0];
+  if (currentCompetitionTab !== `sport:${activeSport}`) currentCompetitionTab = `sport:${activeSport}`;
+  loadCompetitionEvents(activeSport);
+}
+
+function getReaderDate(monthName, day, year, hour = 0, minute = 0) {
+  const monthAliases = {
+    jan: 0, január: 0, januar: 0,
+    feb: 1, febr: 1, február: 1, februar: 1,
+    márc: 2, március: 2, marcius: 2,
+    ápr: 3, április: 3, aprilis: 3,
+    máj: 4, május: 4, majus: 4,
+    jún: 5, június: 5, junius: 5,
+    júl: 6, július: 6, julius: 6,
+    aug: 7, augusztus: 7,
+    szept: 8, szeptember: 8,
+    okt: 9, október: 9, oktober: 9,
+    nov: 10, november: 10,
+    dec: 11, december: 11
+  };
+  const month = monthAliases[monthName.toLocaleLowerCase("hu-HU").replace(/\.$/, "")];
+  if (month === undefined) return null;
+  const date = new Date(year, month, Number(day), Number(hour), Number(minute));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function inferCalendarYear(month, day) {
+  const now = new Date();
+  return month < now.getMonth() ? now.getFullYear() + 1 : now.getFullYear();
+}
+
+function decodeCalendarText(value) {
+  return value
+    .replace(/\\n/gi, " ")
+    .replace(/\\([\\,;])/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function safeCompetitionUrl(value, source) {
+  try {
+    const url = new URL(value || source.url, source.url);
+    if (url.protocol !== "https:" || url.hostname !== new URL(source.url).hostname) return source.url;
+    return url.href;
+  } catch {
+    return source.url;
+  }
+}
+
+function keepUpcomingEvents(events) {
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return events
+    .filter((event) => event.date instanceof Date && !Number.isNaN(event.date.getTime()))
+    .filter((event) => event.allDay ? event.date.getTime() >= startOfToday : event.date.getTime() >= now.getTime())
+    .sort((a, b) => a.date - b.date);
+}
+
+function parseCanoeEvents(text, source) {
+  const events = [];
+  const entries = [...text.matchAll(/\[([^\]]*?)###\s*([^\]]+)\]\((https?:\/\/[^)]+\/naptar\/(\d{4})\/[^)]+)\)/g)];
+  for (const entry of entries) {
+    const [metadata, title, path, yearText] = entry.slice(1);
+    const year = Number(yearText);
+    const dateMatch = metadata.match(/([A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű]+)\s+(\d{1,2})\./);
+    if (!dateMatch) continue;
+    const date = getReaderDate(dateMatch[1], dateMatch[2], year);
+    if (!date) continue;
+    events.push({
+      title: title.trim(),
+      date,
+      allDay: true,
+      location: metadata.slice(dateMatch.index + dateMatch[0].length).trim(),
+      url: safeCompetitionUrl(path, source)
+    });
+  }
+  if (!events.length) throw new Error("A kajak-kenu naptárból nem sikerült eseményeket beolvasni.");
+  return keepUpcomingEvents(events);
+}
+
+function parseRowingEvents(text, source) {
+  const unfolded = text.replace(/\r?\n[ \t]/g, "");
+  const events = [];
+  for (const match of unfolded.matchAll(/BEGIN:VEVENT([\s\S]*?)END:VEVENT/g)) {
+    const block = match[1];
+    const start = block.match(/^DTSTART(?:;[^:]*)?:(\d{8})(?:T(\d{6})Z?)?/m);
+    const summary = block.match(/^SUMMARY(?:;[^:]*)?:(.*)$/m);
+    if (!start || !summary) continue;
+    const date = new Date(
+      Number(start[1].slice(0, 4)),
+      Number(start[1].slice(4, 6)) - 1,
+      Number(start[1].slice(6, 8)),
+      start[2] ? Number(start[2].slice(0, 2)) : 0,
+      start[2] ? Number(start[2].slice(2, 4)) : 0
+    );
+    const location = block.match(/^LOCATION(?:;[^:]*)?:(.*)$/m)?.[1] || "";
+    const url = block.match(/^URL(?:;[^:]*)?:(\S+)/m)?.[1] || source.url;
+    events.push({
+      title: decodeCalendarText(summary[1]),
+      date,
+      allDay: !start[2],
+      location: decodeCalendarText(location),
+      url: safeCompetitionUrl(url, source)
+    });
+  }
+  return keepUpcomingEvents(events);
+}
+
+function parseWaterPoloEvents(text, source) {
+  const section = text.match(/##\s*KÖVETKEZŐ MÉRKŐZÉSEK([\s\S]*?)(?:##\s*KÖZVETÍTÉSEK|$)/i)?.[1];
+  if (!section) throw new Error("A vízilabda-oldalon nem található a következő mérkőzések listája.");
+  const datePattern = /([A-Za-zÁÉÍÓÖŐÚÜŰáéíóöőúüű]+)\.\s*(\d{1,2})\.(?:(\d{1,2}):(\d{2}))?/g;
+  const dates = [...section.matchAll(datePattern)];
+  if (!dates.length) throw new Error("A vízilabda mérkőzések dátuma nem olvasható.");
+  return keepUpcomingEvents(dates.map((match, index) => {
+    const block = section.slice(match.index, dates[index + 1]?.index ?? section.length);
+    const month = getReaderDate(match[1], match[2], new Date().getFullYear())?.getMonth();
+    if (month === undefined) return null;
+    const year = inferCalendarYear(month, Number(match[2]));
+    const date = new Date(Date.UTC(year, month, Number(match[2]), Number(match[3] || 0), Number(match[4] || 0)));
+    const teams = block.match(/!\[[^\]]*(?:Hazai|home)[^\]]*\]\([^)]+\)\s*\n\s*([^\n]+)\s*\n\s*!\[[^\]]*(?:Vendég|away)[^\]]*\]\([^)]+\)\s*\n\s*([^\n]+)/i);
+    const competition = block.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    const venue = block.match(/\]\(https:\/\/maps\.google\.com\/maps\?q=[^)]+\)([^\r\n]+)/i)?.[1]?.trim() || "";
+    const home = teams?.[1].trim();
+    const away = teams?.[2].trim();
+    const hasTeams = Boolean(home && away);
+    return {
+      title: hasTeams ? `${home} – ${away}` : competition?.[1] || "Vízilabda-mérkőzés",
+      subtitle: hasTeams ? competition?.[1] || "" : "",
+      date,
+      timeZone: "Europe/Budapest",
+      allDay: !match[3],
+      location: venue,
+      url: safeCompetitionUrl(competition?.[2], source)
+    };
+  }).filter(Boolean));
+}
+
+function parseFootballEvents(text, source) {
+  const section = text.match(/Következő forduló műsora([\s\S]*?)(?:\n\s*Tabella|\n\s*\[Részletes tabella|$)/i)?.[1];
+  if (!section) throw new Error("Az MLSZ-oldalon nem található a következő forduló műsora.");
+  const datePattern = /(\d{1,2})\.\s*(\d{1,2})\s+(\d{1,2}):(\d{2})/g;
+  const dates = [...section.matchAll(datePattern)];
+  if (!dates.length) throw new Error("Az MLSZ mérkőzések dátuma nem olvasható.");
+  const markdownLinks = (value) => [...value.matchAll(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g)]
+    .filter((match) => value[match.index - 1] !== "!");
+  return keepUpcomingEvents(dates.map((match, index) => {
+    const before = section.slice(0, match.index);
+    const after = section.slice(match.index + match[0].length, dates[index + 1]?.index ?? section.length);
+    const homeLinks = markdownLinks(before);
+    const away = markdownLinks(after)[0];
+    const month = Number(match[1]) - 1;
+    const date = getReaderDate(
+      ["jan", "feb", "márc", "ápr", "máj", "jún", "júl", "aug", "szept", "okt", "nov", "dec"][month],
+      match[2],
+      inferCalendarYear(month, Number(match[2])),
+      match[3],
+      match[4]
+    );
+    const home = homeLinks[homeLinks.length - 1];
+    return {
+      title: home && away ? `${home[1]} – ${away[1]}` : "OTP Bank Liga mérkőzés",
+      subtitle: "OTP Bank Liga",
+      date,
+      allDay: false,
+      location: "",
+      url: source.url
+    };
+  }));
+}
+
+function dateTimeAttribute(date, allDay) {
+  if (!allDay) return date.toISOString();
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+async function fetchCompetitionReader(source) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(source.readerUrl, {
+      cache: "no-store",
+      headers: { Accept: "text/plain" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`A naptárközvetítő hibát jelzett (${response.status}).`);
+    return await response.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function loadCompetitionSource(sourceKey) {
+  if (sourceKey === "hockey") {
+    throw new Error("A jégkorong szövetségi naptára beágyazott, hozzáférés-védett adatforrást használ.");
+  }
+  const source = COMPETITION_SOURCES[sourceKey];
+  const text = await fetchCompetitionReader(source);
+  if (sourceKey === "canoe") return parseCanoeEvents(text, source);
+  if (sourceKey === "rowing") return parseRowingEvents(text, source);
+  if (sourceKey === "water-polo") return parseWaterPoloEvents(text, source);
+  if (sourceKey === "football") return parseFootballEvents(text, source);
+  throw new Error("Ehhez a sportághoz még nincs beállított hivatalos naptár.");
+}
+
+async function getCompetitionEvents(sourceKey, forceRefresh = false) {
+  const cached = competitionCache.get(sourceKey);
+  if (!forceRefresh && cached && Date.now() - cached.loadedAt < COMPETITION_CACHE_DURATION) return cached.events;
+  if (!forceRefresh && competitionLoads.has(sourceKey)) return competitionLoads.get(sourceKey);
+  const request = loadCompetitionSource(sourceKey)
+    .then((events) => {
+      competitionCache.set(sourceKey, { events, loadedAt: Date.now() });
+      return events;
+    })
+    .finally(() => competitionLoads.delete(sourceKey));
+  competitionLoads.set(sourceKey, request);
+  return request;
+}
+
+function renderCompetitionEvents(sport, events) {
+  const source = COMPETITION_SOURCES[SPORT_OPTIONS[sport].source];
+  const list = $("#competition-events");
+  if (!events.length) {
+    $("#competition-empty").hidden = false;
+    $("#competition-empty").innerHTML = `Nincsenek közelgő versenyek.<br><a href="${escapeHTML(source.url)}" target="_blank" rel="noopener">Hivatalos naptár megnyitása</a>`;
+    list.hidden = true;
+    return;
+  }
+  $("#competition-empty").hidden = true;
+  list.hidden = false;
+  list.innerHTML = `<a class="competition-source" href="${escapeHTML(source.url)}" target="_blank" rel="noopener">${escapeHTML(source.name)} · Hivatalos naptár <i data-lucide="external-link" aria-hidden="true"></i></a>
+    ${events.map((event) => {
+      const dateOptions = { month: "short", day: "numeric", weekday: "short" };
+      const timeOptions = { hour: "2-digit", minute: "2-digit" };
+      if (event.timeZone) {
+        dateOptions.timeZone = event.timeZone;
+        timeOptions.timeZone = event.timeZone;
+      }
+      return `
+      <article class="competition-card neumorph-card">
+        <time datetime="${escapeHTML(dateTimeAttribute(event.date, event.allDay))}">${escapeHTML(dateLabel(event.date, dateOptions))}${event.allDay ? "" : ` · ${escapeHTML(new Intl.DateTimeFormat("hu-HU", timeOptions).format(event.date))}`}</time>
+        <h2>${escapeHTML(event.title)}</h2>
+        ${event.subtitle ? `<p class="competition-subtitle">${escapeHTML(event.subtitle)}</p>` : ""}
+        ${event.location ? `<p class="competition-location"><i data-lucide="map-pin" aria-hidden="true"></i>${escapeHTML(event.location)}</p>` : ""}
+        <a class="competition-card-link" href="${escapeHTML(event.url)}" target="_blank" rel="noopener">Részletek <i data-lucide="arrow-up-right" aria-hidden="true"></i></a>
+      </article>`;
+    }).join("")}`;
+  renderLucide(list);
+}
+
+async function loadCompetitionEvents(sport, forceRefresh = false) {
+  const requestId = ++competitionRequestId;
+  const source = COMPETITION_SOURCES[SPORT_OPTIONS[sport].source];
+  $("#competition-empty").hidden = true;
+  $("#competition-events").hidden = true;
+  $("#competition-retry").hidden = true;
+  $("#competition-status").hidden = false;
+  $("#competition-status").textContent = `${source.name} versenyeinek betöltése…`;
+  try {
+    const events = await getCompetitionEvents(SPORT_OPTIONS[sport].source, forceRefresh);
+    if (requestId !== competitionRequestId || lastMainScreen !== "competitions" || !internetAvailable) return;
+    $("#competition-status").hidden = true;
+    renderCompetitionEvents(sport, events);
+  } catch (error) {
+    console.error(`${source.name} naptárának betöltése nem sikerült.`, error);
+    if (requestId !== competitionRequestId || lastMainScreen !== "competitions" || !internetAvailable) return;
+    const message = SPORT_OPTIONS[sport].source === "hockey"
+      ? "A jégkorong-szövetség naptára hozzáférés-védett, ezért itt nem olvasható."
+      : "A hivatalos naptár most nem érhető el.";
+    $("#competition-status").innerHTML = `${message} <a href="${escapeHTML(source.url)}" target="_blank" rel="noopener">Megnyitás</a>`;
+    $("#competition-retry").hidden = false;
+  }
 }
 
 window.addEventListener("online", updateConnection);
 window.addEventListener("offline", updateConnection);
+$("#competition-retry").addEventListener("click", () => {
+  const sport = data.sports.find((item) => `sport:${item}` === currentCompetitionTab);
+  if (sport) loadCompetitionEvents(sport, true);
+});
 $("#retry-connection").addEventListener("click", () => {
   updateConnection().then((online) => {
     showToast(online ? "Van internetkapcsolat." : "Még mindig nincs internetkapcsolat.");
@@ -725,9 +1060,9 @@ function addRound() {
           ${createWheelPicker("time-seconds", 0, "másodperc", 0, 59, 1)}
         </div>
       </div>
-      <div class="mini-field"><span>Gól</span>${createWheelPicker("goals", 0, "gól", 0, 99999, 1)}</div>
-      <div class="mini-field"><span>Ismétlés</span>${createWheelPicker("reps", 10, "ism.", 0, 99999, 1)}</div>
-      <div class="mini-field"><span>Táv</span>${createWheelPicker("distance", 0, "km", 0, 999999, 0.1)}</div>
+      <div class="mini-field"><span>Gól</span>${createWheelPicker("goals", 0, "gól", 0, 99, 1)}</div>
+      <div class="mini-field"><span>Ismétlés</span>${createWheelPicker("reps", 10, "ism.", 0, 99, 1)}</div>
+      <div class="mini-field"><span>Táv</span>${createWheelPicker("distance", 0, "km", 0, 99, 0.1)}</div>
       <label class="mini-field"><span>Cél / megjegyzés</span><input class="text-field" data-field="goal" type="text" maxlength="60" placeholder="Opcionális cél"></label>
     </div>`;
   container.append(row);
