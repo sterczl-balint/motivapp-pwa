@@ -1,17 +1,16 @@
 "use strict";
 
-const CACHE_NAME = "motivapp-shell-v27";
+const CACHE_NAME = "motivapp-shell-v29";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=18",
-  "./app.js?v=15",
+  "./styles.css?v=20",
+  "./app.js?v=17",
+  "./vendor/lucide.min.js?v=1",
   "./manifest.webmanifest",
-  "./icons/icon.svg",
-  "./icons/icon.svg?v=6",
-  "./icons/icon-180.png?v=6",
-  "./icons/icon-192.png?v=6",
-  "./icons/icon-512.png?v=6"
+  "./icons/icon-180.png?v=7",
+  "./icons/icon-192.png?v=7",
+  "./icons/icon-512.png?v=7"
 ];
 
 self.addEventListener("install", (event) => {

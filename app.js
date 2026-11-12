@@ -98,6 +98,10 @@ function escapeHTML(value) {
   })[character]);
 }
 
+function renderLucide() {
+  window.lucide.createIcons({ attrs: { "stroke-width": 2 } });
+}
+
 function formatDuration(seconds) {
   const safe = Math.max(0, Math.floor(seconds || 0));
   const hours = Math.floor(safe / 3600);
@@ -140,6 +144,7 @@ function initialize() {
   renderProfile();
   addRound();
   renderTimer();
+  renderLucide();
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
@@ -190,53 +195,57 @@ document.addEventListener("click", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") closeMenu();
+  if (event.key === "Escape") {
+    closeMenu();
+    closeSportPicker();
+  }
 });
 
 const BOTTOM_TABS = {
   training: [
-    { key: "timer", label: "Stopper", icon: '<circle cx="12" cy="13" r="8" /><path d="M9 2h6m-3 0v3m6.6.4 1.5-1.5M12 9v4l2.5 2" />' },
-    { key: "workouts", label: "Edzéseim", icon: '<circle cx="12" cy="12" r="9" /><path d="M12 8v8m-4-4h8" />' }
+    { key: "timer", label: "Stopper", icon: "timer" },
+    { key: "workouts", label: "Edzéseim", icon: "dumbbell" }
   ],
   progress: [
-    { key: "chart", label: "Grafikon", icon: '<path d="M3 3v18h18M7 14l4-4 3 3 6-7m0 0h-5m5 0v5" />' },
-    { key: "results", label: "Eredmények", icon: '<path d="M8 3h8v3a4 4 0 0 1-8 0V3Zm0 2H5v2a4 4 0 0 0 4 4m7-6h3v2a4 4 0 0 1-4 4m-3 0v5m-4 4h8m-7-4h6v4H9z" />' },
-    { key: "medals", label: "Érmek", icon: '<circle cx="12" cy="9" r="5" /><path d="m9 13-1 8 4-2 4 2-1-8M10 9l1.2 1.2L14 7" />' }
+    { key: "chart", label: "Grafikon", icon: "chart-no-axes-combined" },
+    { key: "results", label: "Eredmények", icon: "trophy" },
+    { key: "medals", label: "Érmek", icon: "medal" }
   ],
-  competitions: []
+  competitions: [{ key: "add-sport", label: "Sportág hozzáadása", icon: "plus" }]
 };
 
 function getBottomTabs(screen) {
-  if (screen !== "competitions") return BOTTOM_TABS[screen] || [];
-  return [
-    ...data.sports.map((sport) => ({ key: `sport:${sport}`, label: sport, icon: '<path d="M4 12h16" />' })),
-    { key: "add-sport", label: "Sportág hozzáadása", icon: '<path d="M12 5v14m-7-7h14" />' }
-  ];
+  return BOTTOM_TABS[screen] || [];
 }
 
 function renderBottomTabs(screen) {
   const nav = $("#bottom-nav");
   const tabs = getBottomTabs(screen);
+  if (screen === "competitions" && !internetAvailable) {
+    nav.hidden = true;
+    nav.innerHTML = "";
+    return;
+  }
   if (!tabs.length) {
     nav.hidden = true;
     nav.innerHTML = "";
     return;
   }
   const isTraining = screen === "training";
-  const selectedTab = isTraining
-    ? currentTrainingTab
-    : screen === "progress" ? currentProgressTab : currentCompetitionTab;
+  const selectedTab = isTraining ? currentTrainingTab
+    : screen === "progress" ? currentProgressTab : "add-sport";
   const selectedIndex = tabs.findIndex((tab) => tab.key === selectedTab);
   nav.hidden = false;
   nav.setAttribute("aria-label", isTraining
     ? "Edzési eszközök"
-    : screen === "progress" ? "Fejlődési nézetek" : "Versenysportok");
+    : screen === "progress" ? "Fejlődési nézetek" : "Sportág hozzáadása");
   nav.style.setProperty("--segments", String(tabs.length));
   nav.style.setProperty("--segment", String(Math.max(0, selectedIndex)));
   nav.innerHTML = `<div class="bottom-nav-track"><span class="segment-pill" aria-hidden="true"></span>${tabs.map((tab) => `
     <button class="segment-button bottom-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-bottom-tab="${escapeHTML(tab.key)}" aria-label="${escapeHTML(tab.label)}" aria-pressed="${tab.key === selectedTab}" title="${escapeHTML(tab.label)}">
-      ${tab.key === "add-sport" ? '<svg class="segment-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14" /></svg>' : `<span class="sport-tab-label">${escapeHTML(tab.label)}</span>`}
+      <i class="segment-icon" data-lucide="${tab.icon}" aria-hidden="true"></i><span>${escapeHTML(tab.label)}</span>
     </button>`).join("")}</div>`;
+  renderLucide(nav);
   const activeTab = $(".bottom-tab.active", nav);
   if (activeTab) nav.scrollLeft = Math.max(0, activeTab.offsetLeft - (nav.clientWidth - activeTab.offsetWidth) / 2);
   if (isTraining) {
@@ -272,54 +281,86 @@ $("#bottom-nav").addEventListener("click", (event) => {
   } else if (currentScreen === "competitions" && bottomTab === "add-sport") {
     currentCompetitionTab = "add-sport";
     openSportPicker();
-  } else if (currentScreen === "competitions" && bottomTab.startsWith("sport:")) {
-    currentCompetitionTab = bottomTab;
-    $("#sport-picker").hidden = true;
-    renderBottomTabs("competitions");
-    renderCompetitionState();
   }
 });
 
 function renderSports() {
   const activeSport = data.sports.find((sport) => `sport:${sport}` === currentCompetitionTab);
-  if (!activeSport && currentCompetitionTab !== "add-sport") {
-    currentCompetitionTab = data.sports.length ? `sport:${data.sports[0]}` : "add-sport";
-  }
-  renderCompetitionState();
-  const available = SPORTS.filter((sport) => !data.sports.includes(sport));
-  $("#sport-select").innerHTML = available.length
-    ? available.map((sport) => `<option value="${escapeHTML(sport)}">${escapeHTML(sport)}</option>`).join("")
-    : '<option value="">Minden sportág hozzá van adva</option>';
-  $("#sport-select").disabled = available.length === 0;
-  $("#add-sport-confirm").disabled = available.length === 0;
-  $("#sport-picker-selected").innerHTML = data.sports.map((sport) => `
-    <span class="selected-sport-chip">${escapeHTML(sport)}
-      <button type="button" data-remove-sport="${escapeHTML(sport)}" aria-label="${escapeHTML(sport)} eltávolítása">×</button>
+  if (!activeSport) currentCompetitionTab = data.sports.length ? `sport:${data.sports[0]}` : "add-sport";
+  const sportIcons = {
+    "Foci": "goal",
+    "Jégkorong": "goal",
+    "Síkvízi kajak-kenu": "waves",
+    "Evezés": "sailboat",
+    "Vízilabda": "waves",
+    "Szlalom kajak-kenu": "waves",
+    "Kajakpóló": "waves"
+  };
+  $("#sport-chips").innerHTML = data.sports.map((sport) => `
+    <span class="selected-sport-chip">
+      <button class="sport-chip-select${currentCompetitionTab === `sport:${sport}` ? " active" : ""}" type="button" data-select-sport="${escapeHTML(sport)}" aria-pressed="${currentCompetitionTab === `sport:${sport}`}">
+        <i data-lucide="${sportIcons[sport]}" aria-hidden="true"></i>${escapeHTML(sport)}
+      </button>
+      <button class="sport-chip-remove" type="button" data-remove-sport="${escapeHTML(sport)}" aria-label="${escapeHTML(sport)} eltávolítása"><i data-lucide="x"></i></button>
     </span>`).join("");
+  const available = SPORTS.filter((sport) => !data.sports.includes(sport));
+  $("#sport-picker-list").innerHTML = available.length
+    ? available.map((sport) => `
+      <button class="sport-option" type="button" data-add-sport="${escapeHTML(sport)}">
+        <i data-lucide="${sportIcons[sport]}" aria-hidden="true"></i><span>${escapeHTML(sport)}</span><i data-lucide="plus" aria-hidden="true"></i>
+      </button>`).join("")
+    : '<p class="sport-picker-empty">Minden sportág hozzá van adva.</p>';
+  renderLucide($("#sport-chips"));
+  renderLucide($("#sport-picker-list"));
+  renderCompetitionState();
   if (lastMainScreen === "competitions") renderBottomTabs("competitions");
 }
 
 function openSportPicker() {
-  $("#sport-picker").hidden = false;
+  $("#sport-sheet-backdrop").hidden = false;
+  document.body.classList.add("sheet-open");
   renderSports();
 }
 
-$("#close-sport-picker").addEventListener("click", () => { $("#sport-picker").hidden = true; });
-$("#add-sport-confirm").addEventListener("click", () => {
-  const sport = $("#sport-select").value;
+function closeSportPicker() {
+  $("#sport-sheet-backdrop").hidden = true;
+  document.body.classList.remove("sheet-open");
+}
+
+$("#close-sport-picker").addEventListener("click", closeSportPicker);
+$("#sport-sheet-backdrop").addEventListener("click", (event) => {
+  if (event.target === $("#sport-sheet-backdrop")) closeSportPicker();
+});
+let sheetTouchStartY = null;
+$("#sport-picker").addEventListener("touchstart", (event) => {
+  sheetTouchStartY = event.touches[0]?.clientY ?? null;
+}, { passive: true });
+$("#sport-picker").addEventListener("touchend", (event) => {
+  if (sheetTouchStartY !== null && event.changedTouches[0].clientY - sheetTouchStartY > 80) closeSportPicker();
+  sheetTouchStartY = null;
+}, { passive: true });
+$("#sport-picker-list").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-add-sport]");
+  if (!button) return;
+  const sport = button.dataset.addSport;
   if (!SPORTS.includes(sport) || data.sports.includes(sport)) return;
   data.sports.push(sport);
   currentCompetitionTab = `sport:${sport}`;
   saveData(`${sport} hozzáadva.`);
+  closeSportPicker();
   renderSports();
-  renderBottomTabs("competitions");
 });
 
-$("#sport-picker-selected").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-remove-sport]");
-  if (!button) return;
-  data.sports = data.sports.filter((sport) => sport !== button.dataset.removeSport);
-  saveData("Sportág eltávolítva.");
+$("#sport-chips").addEventListener("click", (event) => {
+  const removeButton = event.target.closest("[data-remove-sport]");
+  if (removeButton) {
+    data.sports = data.sports.filter((sport) => sport !== removeButton.dataset.removeSport);
+    saveData("Sportág eltávolítva.");
+  } else {
+    const selectButton = event.target.closest("[data-select-sport]");
+    if (!selectButton) return;
+    currentCompetitionTab = `sport:${selectButton.dataset.selectSport}`;
+  }
   renderSports();
 });
 
@@ -347,11 +388,11 @@ function applyConnectionState(online) {
   $("#connection-label").textContent = online ? "Online" : "Offline mód";
   $("#competition-state").hidden = online;
   if (!online) {
-    $("#competition-status").innerHTML = '<span class="connection-dot"></span> Nincs kapcsolat';
     $("#competition-message").textContent = "Nincs internetkapcsolat";
     $("#competition-description").textContent = "Csatlakozz az internethez a versenyek megtekintéséhez.";
-    $("#retry-connection").textContent = "Újrapróbálás";
   }
+  if (!online) closeSportPicker();
+  if (lastMainScreen === "competitions") renderBottomTabs("competitions");
   renderCompetitionState();
 }
 
@@ -386,18 +427,13 @@ async function updateConnection() {
 
 function renderCompetitionState() {
   if (!$("#competition-empty")) return;
-  if (data.sports.length === 0) {
-    $("#competition-empty").hidden = false;
-    $("#competition-empty").textContent = "Még nincsenek sportok kiválasztva.";
-    return;
-  }
+  $("#competition-state").hidden = internetAvailable;
+  $("#sport-chips").hidden = !internetAvailable || data.sports.length === 0;
   $("#competition-empty").hidden = !internetAvailable;
   if (!internetAvailable) return;
   $("#competition-empty").textContent = data.sports.length === 0
     ? "Még nincsenek sportok kiválasztva."
-    : currentCompetitionTab === "add-sport"
-      ? "Válassz sportot a versenyek megtekintéséhez."
-      : "Nincsenek versenyek.";
+    : "Nincsenek versenyek.";
 }
 
 window.addEventListener("online", updateConnection);
@@ -495,6 +531,8 @@ function renderTimer() {
   const dial = $("#timer-dial");
   dial.classList.toggle("is-working", timerMode === "interval" && isWorkPhase);
   dial.classList.toggle("is-resting", timerMode === "interval" && !isWorkPhase);
+  dial.closest(".timer-card").classList.toggle("is-working", timerMode === "interval" && isWorkPhase);
+  dial.closest(".timer-card").classList.toggle("is-resting", timerMode === "interval" && !isWorkPhase);
   let seconds;
   let ratio;
   let phase;
@@ -521,8 +559,9 @@ function renderTimer() {
   const circumference = 2 * Math.PI * 96;
   $("#timer-progress-circle").style.strokeDashoffset = String(circumference * (1 - Math.max(0, Math.min(1, ratio))));
   $("#timer-toggle").innerHTML = timerRunning
-    ? '<span class="play-icon">Ⅱ</span> Szünet'
-    : `<span class="play-icon">▶</span> ${timerElapsed || (timerMode === "interval" && phaseRemaining < getPhaseDuration()) ? "Folytatás" : "Indítás"}`;
+    ? '<i data-lucide="pause"></i> Szünet'
+    : `<i data-lucide="play"></i> ${timerElapsed || (timerMode === "interval" && phaseRemaining < getPhaseDuration()) ? "Folytatás" : "Indítás"}`;
+  renderLucide($("#timer-toggle"));
   $("#timer-lap").hidden = timerMode !== "stopwatch";
   $("#timer-lap").disabled = timerMode !== "stopwatch" || timerElapsed < 1;
   const laps = $("#timer-laps");
@@ -1002,10 +1041,11 @@ function renderWorkouts() {
     ];
     if (distance !== null) details.push(`${distance.toLocaleString("hu-HU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`);
     return `<article class="workout-card">
-      <div class="workout-card-top"><div><h3>${escapeHTML(workout.name)}</h3><p class="card-meta">${details.join(" · ")}</p></div><svg class="workout-icon runner-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="16.5" cy="4.5" r="2" /><path d="m13.5 8-3 4.5 3.5 2 3.5 4M10.5 12.5l-4 2.5m7.5-7 4 1.5 2.5 3M12 14.5l-2 5m7-2 3 3" /></svg></div>
-      <div class="card-actions"><button class="small-action" type="button" data-complete-workout="${escapeHTML(workout.id)}">✓ Edzés elvégzése</button><button class="small-action delete-action" type="button" data-delete-workout="${escapeHTML(workout.id)}">Törlés</button></div>
+      <div class="workout-card-top"><div><h3>${escapeHTML(workout.name)}</h3><p class="card-meta">${details.join(" · ")}</p></div><i class="workout-icon" data-lucide="list-checks" aria-hidden="true"></i></div>
+      <div class="card-actions"><button class="small-action" type="button" data-complete-workout="${escapeHTML(workout.id)}"><i data-lucide="check"></i> Edzés elvégzése</button><button class="small-action delete-action" type="button" data-delete-workout="${escapeHTML(workout.id)}"><i data-lucide="trash-2"></i> Törlés</button></div>
     </article>`;
   }).join("");
+  renderLucide($("#workout-list"));
 }
 
 $("#workout-list").addEventListener("click", (event) => {
@@ -1107,8 +1147,9 @@ function renderResults() {
   $("#result-list").innerHTML = results.map((result) => `
     <article class="activity-card">
       <div><h3>${escapeHTML(result.name)}</h3><p class="card-meta">${escapeHTML(result.place)} · ${dateLabel(result.date, { year: "numeric", month: "short", day: "numeric" })}</p></div>
-      <button class="round-action secondary-action" type="button" data-delete-result="${escapeHTML(result.id)}" aria-label="Eredmény törlése: ${escapeHTML(result.name)}" style="width:34px;height:34px;font-size:16px">×</button>
+      <button class="round-action secondary-action" type="button" data-delete-result="${escapeHTML(result.id)}" aria-label="Eredmény törlése: ${escapeHTML(result.name)}" style="width:34px;height:34px"><i data-lucide="x"></i></button>
     </article>`).join("");
+  renderLucide($("#result-list"));
 }
 
 $("#result-list").addEventListener("click", (event) => {
@@ -1124,11 +1165,12 @@ function renderMedals() {
   $("#medal-list").innerHTML = data.medals.map((medal) => `
     <article class="medal-card">
       <details class="medal-details">
-        <summary><span class="medal-art" aria-hidden="true">✧</span><span class="medal-name">${escapeHTML(medal.name)}</span><span class="medal-meta">${dateLabel(medal.date, { year: "numeric", month: "short", day: "numeric" })}</span></summary>
+        <summary><span class="medal-art" aria-hidden="true"><i data-lucide="medal"></i></span><span class="medal-name">${escapeHTML(medal.name)}</span><span class="medal-meta">${dateLabel(medal.date, { year: "numeric", month: "short", day: "numeric" })}</span></summary>
         <div class="medal-location">${escapeHTML(medal.event)}<br>${escapeHTML(medal.location)}</div>
       </details>
       <button class="small-action delete-action medal-delete" type="button" data-delete-medal="${escapeHTML(medal.id)}">Érem törlése</button>
     </article>`).join("");
+  renderLucide($("#medal-list"));
 }
 
 $("#medal-list").addEventListener("click", (event) => {
