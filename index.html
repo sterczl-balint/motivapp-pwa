@@ -11,7 +11,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon.svg?v=6" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icons/icon-180.png?v=6" />
-    <link rel="stylesheet" href="./styles.css?v=17" />
+    <link rel="stylesheet" href="./styles.css?v=18" />
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
   <body>
@@ -111,7 +111,7 @@
           <div class="page-heading">
             <h1 id="competitions-title">Versenyek<span class="heading-dot">.</span></h1>
           </div>
-          <div class="competition-state neumorph-card" aria-live="polite">
+          <div id="competition-state" class="competition-state neumorph-card" aria-live="polite">
             <svg class="cable-art" viewBox="0 0 240 160" role="img" aria-label="Elszakadt internetkábel">
               <path class="cable-line cable-left" d="M18 82h68l16-16" />
               <path class="cable-line cable-right" d="m138 96 16-14h68" />
@@ -126,16 +126,13 @@
             <p id="competition-description">A versenyek megtekintéséhez csatlakozz az internethez. Az edzéseid és a fejlődésed addig is elérhető offline.</p>
             <button id="retry-connection" class="secondary-button" type="button">Újrapróbálás</button>
           </div>
-          <section class="sports-panel">
-            <h2>Saját sportjaim</h2>
-            <div id="sport-list" class="sport-list"></div>
-            <p id="sport-empty" class="empty-state">Adj hozzá egy sportágat a + gombbal.</p>
-          </section>
+          <p id="competition-empty" class="competition-empty" aria-live="polite"></p>
           <div id="sport-picker" class="sport-picker neumorph-card" hidden>
             <div class="form-heading"><h3>Sportág hozzáadása</h3><button id="close-sport-picker" class="icon-button close-button" type="button" aria-label="Bezárás">×</button></div>
             <label class="field-label" for="sport-select">Sportág</label>
             <select id="sport-select" class="text-field"></select>
             <button id="add-sport-confirm" class="primary-action save-workout-button" type="button">Hozzáadás</button>
+            <div id="sport-picker-selected" class="sport-picker-selected"></div>
           </div>
         </section>
 
@@ -212,6 +209,6 @@
       <nav class="bottom-nav" id="bottom-nav" aria-label="Edzés fülek" hidden></nav>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=12" defer></script>
+    <script src="./app.js?v=15" defer></script>
   </body>
 </html>

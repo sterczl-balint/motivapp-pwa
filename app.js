@@ -65,6 +65,8 @@ const data = readData();
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 let toastTimeout;
+let internetAvailable = navigator.onLine;
+let connectionCheckId = 0;
 
 function showToast(message) {
   const toast = $("#toast");
@@ -162,6 +164,7 @@ function showScreen(screenName) {
   renderBottomTabs(screenName === "profile" ? "profile" : screenName);
   closeMenu();
   if (screenName === "progress") renderProgress();
+  if (screenName === "competitions") renderCompetitionState();
 }
 
 function closeMenu() {
@@ -200,20 +203,26 @@ const BOTTOM_TABS = {
     { key: "results", label: "Eredmények", icon: '<path d="M8 3h8v3a4 4 0 0 1-8 0V3Zm0 2H5v2a4 4 0 0 0 4 4m7-6h3v2a4 4 0 0 1-4 4m-3 0v5m-4 4h8m-7-4h6v4H9z" />' },
     { key: "medals", label: "Érmek", icon: '<circle cx="12" cy="9" r="5" /><path d="m9 13-1 8 4-2 4 2-1-8M10 9l1.2 1.2L14 7" />' }
   ],
-  competitions: [
-    { key: "add-sport", label: "Sportág hozzáadása", icon: '<path d="M12 5v14m-7-7h14" />' }
-  ]
+  competitions: []
 };
+
+function getBottomTabs(screen) {
+  if (screen !== "competitions") return BOTTOM_TABS[screen] || [];
+  return [
+    ...data.sports.map((sport) => ({ key: `sport:${sport}`, label: sport, icon: '<path d="M4 12h16" />' })),
+    { key: "add-sport", label: "Sportág hozzáadása", icon: '<path d="M12 5v14m-7-7h14" />' }
+  ];
+}
 
 function renderBottomTabs(screen) {
   const nav = $("#bottom-nav");
-  if (!BOTTOM_TABS[screen]) {
+  const tabs = getBottomTabs(screen);
+  if (!tabs.length) {
     nav.hidden = true;
     nav.innerHTML = "";
     return;
   }
   const isTraining = screen === "training";
-  const tabs = BOTTOM_TABS[screen];
   const selectedTab = isTraining
     ? currentTrainingTab
     : screen === "progress" ? currentProgressTab : currentCompetitionTab;
@@ -224,10 +233,12 @@ function renderBottomTabs(screen) {
     : screen === "progress" ? "Fejlődési nézetek" : "Versenysportok");
   nav.style.setProperty("--segments", String(tabs.length));
   nav.style.setProperty("--segment", String(Math.max(0, selectedIndex)));
-  nav.innerHTML = `<span class="segment-pill" aria-hidden="true"></span>${tabs.map((tab) => `
-    <button class="segment-button bottom-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-bottom-tab="${tab.key}" aria-label="${tab.label}" aria-pressed="${tab.key === selectedTab}" title="${tab.label}">
-      <svg class="segment-icon" viewBox="0 0 24 24" aria-hidden="true">${tab.icon}</svg>
-    </button>`).join("")}`;
+  nav.innerHTML = `<div class="bottom-nav-track"><span class="segment-pill" aria-hidden="true"></span>${tabs.map((tab) => `
+    <button class="segment-button bottom-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-bottom-tab="${escapeHTML(tab.key)}" aria-label="${escapeHTML(tab.label)}" aria-pressed="${tab.key === selectedTab}" title="${escapeHTML(tab.label)}">
+      ${tab.key === "add-sport" ? '<svg class="segment-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14m-7-7h14" /></svg>' : `<span class="sport-tab-label">${escapeHTML(tab.label)}</span>`}
+    </button>`).join("")}</div>`;
+  const activeTab = $(".bottom-tab.active", nav);
+  if (activeTab) nav.scrollLeft = Math.max(0, activeTab.offsetLeft - (nav.clientWidth - activeTab.offsetWidth) / 2);
   if (isTraining) {
     $("#timer-panel").hidden = currentTrainingTab !== "timer";
     $("#workouts-panel").hidden = currentTrainingTab !== "workouts";
@@ -241,7 +252,7 @@ $("#bottom-nav").addEventListener("click", (event) => {
   if (!button) return;
   const { bottomTab } = button.dataset;
   const currentScreen = lastMainScreen;
-  const tabs = BOTTOM_TABS[currentScreen];
+  const tabs = getBottomTabs(currentScreen);
   const selectedIndex = tabs?.findIndex((tab) => tab.key === bottomTab) ?? -1;
   if (selectedIndex < 0) return;
   $("#bottom-nav").style.setProperty("--segment", String(selectedIndex));
@@ -259,23 +270,33 @@ $("#bottom-nav").addEventListener("click", (event) => {
     PROGRESS_TABS.forEach((tab) => { $(`#progress-${tab}`).hidden = tab !== bottomTab; });
     if (bottomTab === "chart") renderProgress();
   } else if (currentScreen === "competitions" && bottomTab === "add-sport") {
+    currentCompetitionTab = "add-sport";
     openSportPicker();
+  } else if (currentScreen === "competitions" && bottomTab.startsWith("sport:")) {
+    currentCompetitionTab = bottomTab;
+    $("#sport-picker").hidden = true;
+    renderBottomTabs("competitions");
+    renderCompetitionState();
   }
 });
 
 function renderSports() {
-  $("#sport-empty").hidden = data.sports.length > 0;
-  $("#sport-list").innerHTML = data.sports.map((sport) => `
-    <article class="sport-card">
-      <span>${escapeHTML(sport)}</span>
-      <button class="round-action secondary-action" type="button" data-remove-sport="${escapeHTML(sport)}" aria-label="${escapeHTML(sport)} eltávolítása">×</button>
-    </article>`).join("");
+  const activeSport = data.sports.find((sport) => `sport:${sport}` === currentCompetitionTab);
+  if (!activeSport && currentCompetitionTab !== "add-sport") {
+    currentCompetitionTab = data.sports.length ? `sport:${data.sports[0]}` : "add-sport";
+  }
+  renderCompetitionState();
   const available = SPORTS.filter((sport) => !data.sports.includes(sport));
   $("#sport-select").innerHTML = available.length
     ? available.map((sport) => `<option value="${escapeHTML(sport)}">${escapeHTML(sport)}</option>`).join("")
     : '<option value="">Minden sportág hozzá van adva</option>';
   $("#sport-select").disabled = available.length === 0;
   $("#add-sport-confirm").disabled = available.length === 0;
+  $("#sport-picker-selected").innerHTML = data.sports.map((sport) => `
+    <span class="selected-sport-chip">${escapeHTML(sport)}
+      <button type="button" data-remove-sport="${escapeHTML(sport)}" aria-label="${escapeHTML(sport)} eltávolítása">×</button>
+    </span>`).join("");
+  if (lastMainScreen === "competitions") renderBottomTabs("competitions");
 }
 
 function openSportPicker() {
@@ -288,12 +309,13 @@ $("#add-sport-confirm").addEventListener("click", () => {
   const sport = $("#sport-select").value;
   if (!SPORTS.includes(sport) || data.sports.includes(sport)) return;
   data.sports.push(sport);
+  currentCompetitionTab = `sport:${sport}`;
   saveData(`${sport} hozzáadva.`);
   renderSports();
-  if (data.sports.length === SPORTS.length) $("#sport-picker").hidden = true;
+  renderBottomTabs("competitions");
 });
 
-$("#sport-list").addEventListener("click", (event) => {
+$("#sport-picker-selected").addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-sport]");
   if (!button) return;
   data.sports = data.sports.filter((sport) => sport !== button.dataset.removeSport);
@@ -319,24 +341,71 @@ window.addEventListener("appinstalled", () => {
   showToast("A Motivapp telepítve lett.");
 });
 
-function updateConnection() {
-  const online = navigator.onLine;
+function applyConnectionState(online) {
   const indicator = $(".connection-indicator");
   indicator.classList.toggle("is-offline", !online);
   $("#connection-label").textContent = online ? "Online" : "Offline mód";
-  $("#competition-status").innerHTML = `<span class="connection-dot"></span> ${online ? "Online kapcsolat" : "Nincs kapcsolat"}`;
-  $("#competition-message").textContent = online ? "Az online versenyekhez még hiányzik a kiszolgáló." : "Nincs internetkapcsolat";
-  $("#competition-description").textContent = online
-    ? "Az internetkapcsolat aktív. Az online versenyek megjelenítéséhez a versenyadatokat szolgáltató kapcsolat beállítása is szükséges."
-    : "A versenyek megtekintéséhez csatlakozz az internethez. Az edzéseid és a fejlődésed addig is elérhető offline.";
-  $("#retry-connection").textContent = online ? "Kapcsolat újraellenőrzése" : "Újrapróbálás";
+  $("#competition-state").hidden = online;
+  if (!online) {
+    $("#competition-status").innerHTML = '<span class="connection-dot"></span> Nincs kapcsolat';
+    $("#competition-message").textContent = "Nincs internetkapcsolat";
+    $("#competition-description").textContent = "Csatlakozz az internethez a versenyek megtekintéséhez.";
+    $("#retry-connection").textContent = "Újrapróbálás";
+  }
+  renderCompetitionState();
+}
+
+async function updateConnection() {
+  const checkId = ++connectionCheckId;
+  if (!navigator.onLine) {
+    internetAvailable = false;
+    applyConnectionState(false);
+    return false;
+  }
+  $("#connection-label").textContent = "Kapcsolat ellenőrzése";
+  $("#competition-state").hidden = true;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 5000);
+  let connected = false;
+  try {
+    const response = await fetch(`./manifest.webmanifest?connectivity-check=${Date.now()}`, {
+      cache: "no-store",
+      signal: controller.signal
+    });
+    connected = response.ok;
+  } catch {
+    connected = false;
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (checkId !== connectionCheckId) return internetAvailable;
+  internetAvailable = connected;
+  applyConnectionState(internetAvailable);
+  return internetAvailable;
+}
+
+function renderCompetitionState() {
+  if (!$("#competition-empty")) return;
+  if (data.sports.length === 0) {
+    $("#competition-empty").hidden = false;
+    $("#competition-empty").textContent = "Még nincsenek sportok kiválasztva.";
+    return;
+  }
+  $("#competition-empty").hidden = !internetAvailable;
+  if (!internetAvailable) return;
+  $("#competition-empty").textContent = data.sports.length === 0
+    ? "Még nincsenek sportok kiválasztva."
+    : currentCompetitionTab === "add-sport"
+      ? "Válassz sportot a versenyek megtekintéséhez."
+      : "Nincsenek versenyek.";
 }
 
 window.addEventListener("online", updateConnection);
 window.addEventListener("offline", updateConnection);
 $("#retry-connection").addEventListener("click", () => {
-  updateConnection();
-  showToast(navigator.onLine ? "Van internetkapcsolat. A versenyszolgáltatás még nincs beállítva." : "Még mindig nincs internetkapcsolat.");
+  updateConnection().then((online) => {
+    showToast(online ? "Van internetkapcsolat." : "Még mindig nincs internetkapcsolat.");
+  });
 });
 
 let timerMode = "stopwatch";
