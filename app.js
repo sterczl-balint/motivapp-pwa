@@ -133,7 +133,6 @@ function showScreen(screenName) {
   renderBottomTabs(screenName === "profile" ? "profile" : screenName);
   closeMenu();
   if (screenName === "progress") renderProgress();
-  $("#main-content").scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function closeMenu() {
@@ -165,7 +164,7 @@ document.addEventListener("keydown", (event) => {
 const BOTTOM_TABS = {
   training: [
     { key: "timer", label: "Stopper", icon: '<circle cx="12" cy="13" r="8" /><path d="M9 2h6m-3 0v3m6.6.4 1.5-1.5M12 9v4l2.5 2" />' },
-    { key: "workouts", label: "Edzéseim", icon: '<circle cx="16.5" cy="4.5" r="2" /><path d="m13.5 8-3 4.5 3.5 2 3.5 4m-7-6-4 2.5m7.5-7 4 1.5 2.5 3M12 14.5l-2 5m7-2 3 3" />' }
+    { key: "workouts", label: "Edzéseim", icon: '<circle cx="12" cy="12" r="9" /><path d="M12 8v8m-4-4h8" />' }
   ],
   progress: [
     { key: "chart", label: "Grafikon", icon: '<path d="M3 3v18h18M7 14l4-4 3 3 6-7m0 0h-5m5 0v5" />' },
@@ -344,6 +343,7 @@ function renderTimer() {
   $$(".dial-mode-label").forEach((label) => {
     const active = label.dataset.mode === timerMode;
     label.classList.toggle("active", active);
+    label.disabled = timerRunning;
     label.setAttribute("aria-pressed", String(active));
   });
   renderTimerSettings();
@@ -499,8 +499,10 @@ $("#timer-lap").addEventListener("click", () => {
   renderTimer();
 });
 function selectTimerMode(nextIndex) {
-  if (timerRunning) pauseTimer(true);
-  timerMode = TIMER_MODES[(nextIndex + TIMER_MODES.length) % TIMER_MODES.length];
+  if (timerRunning) return;
+  const nextMode = TIMER_MODES[(nextIndex + TIMER_MODES.length) % TIMER_MODES.length];
+  if (nextMode === timerMode) return;
+  timerMode = nextMode;
   timerElapsed = 0;
   loggedTimerElapsed = 0;
   workElapsed = 0;
@@ -514,40 +516,6 @@ function selectTimerMode(nextIndex) {
 $$(".dial-mode-label").forEach((label) => {
   label.addEventListener("click", () => selectTimerMode(TIMER_MODES.indexOf(label.dataset.mode)));
 });
-
-let dialDragging = false;
-function dialAngle(event) {
-  const dial = $("#timer-dial");
-  const bounds = dial.getBoundingClientRect();
-  const radians = Math.atan2(event.clientX - bounds.left - bounds.width / 2, bounds.top + bounds.height / 2 - event.clientY);
-  return ((radians * 180 / Math.PI) + 360) % 360;
-}
-$("#timer-dial").addEventListener("pointerdown", (event) => {
-  if (event.target.closest("button") || event.target.closest(".timer-center")) return;
-  dialDragging = true;
-  $("#timer-dial").setPointerCapture(event.pointerId);
-  $("#timer-dial").style.setProperty("--mode-angle", `${dialAngle(event)}deg`);
-});
-$("#timer-dial").addEventListener("pointermove", (event) => {
-  if (dialDragging) $("#timer-dial").style.setProperty("--mode-angle", `${dialAngle(event)}deg`);
-});
-function snapDialToNearestMode() {
-  if (!dialDragging) return;
-  dialDragging = false;
-  const currentAngle = (Number.parseFloat($("#timer-dial").style.getPropertyValue("--mode-angle")) + 360) % 360;
-  const selectedIndex = TIMER_MODE_ANGLES.reduce((nearest, angle, index) => {
-    const nearestDelta = Math.abs(((TIMER_MODE_ANGLES[nearest] - currentAngle + 540) % 360) - 180);
-    const delta = Math.abs(((angle - currentAngle + 540) % 360) - 180);
-    return delta < nearestDelta ? index : nearest;
-  }, 0);
-  selectTimerMode(selectedIndex);
-}
-$("#timer-dial").addEventListener("pointerup", (event) => {
-  if (!dialDragging) return;
-  $("#timer-dial").style.setProperty("--mode-angle", `${dialAngle(event)}deg`);
-  snapDialToNearestMode();
-});
-$("#timer-dial").addEventListener("pointercancel", snapDialToNearestMode);
 
 function recordSession(seconds, name) {
   if (!Number.isFinite(seconds) || seconds < 1) return;
@@ -730,7 +698,6 @@ $("#workout-form").addEventListener("submit", (event) => {
 
 $("#add-workout-button").addEventListener("click", () => {
   $("#workout-form").hidden = false;
-  $("#workout-name").focus();
 });
 $("#close-workout-form").addEventListener("click", () => { $("#workout-form").hidden = true; });
 
@@ -887,9 +854,19 @@ function setFormVisible(buttonId, formId) {
   $(`#${buttonId}`).addEventListener("click", () => {
     const form = $(`#${formId}`);
     form.hidden = !form.hidden;
-    if (!form.hidden) form.querySelector("input")?.focus();
   });
 }
+
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches("input, textarea, select")) document.body.classList.add("keyboard-open");
+});
+document.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    if (!document.activeElement?.matches("input, textarea, select")) {
+      document.body.classList.remove("keyboard-open");
+    }
+  }, 0);
+});
 setFormVisible("add-result-button", "result-form");
 setFormVisible("add-medal-button", "medal-form");
 
