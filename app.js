@@ -9,17 +9,34 @@ const MODE_LABELS = {
 };
 const TIMER_MODE_ANGLES = [0, 32, 64];
 const PROGRESS_TABS = ["chart", "results", "medals"];
+const SPORTS = [
+  "Foci",
+  "Jégkorong",
+  "Síkvízi kajak-kenu",
+  "Evezés",
+  "Vízilabda",
+  "Szlalom kajak-kenu",
+  "Kajakpóló"
+];
 const defaults = {
-  profile: { name: "" },
+  profile: {
+    email: "",
+    name: "",
+    club: "",
+    gender: "",
+    notifications: "all",
+    language: "hu"
+  },
   workouts: [],
   recentWorkoutNames: [],
+  sports: [],
   sessions: [],
   results: [],
   medals: []
 };
 
 function freshData() {
-  return { profile: { ...defaults.profile }, workouts: [], recentWorkoutNames: [], sessions: [], results: [], medals: [] };
+  return { profile: { ...defaults.profile }, workouts: [], recentWorkoutNames: [], sports: [], sessions: [], results: [], medals: [] };
 }
 
 function readData() {
@@ -33,6 +50,7 @@ function readData() {
       recentWorkoutNames: Array.isArray(parsed.recentWorkoutNames)
         ? parsed.recentWorkoutNames.filter((name) => typeof name === "string")
         : [],
+      sports: Array.isArray(parsed.sports) ? parsed.sports.filter((sport) => SPORTS.includes(sport)) : [],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       results: Array.isArray(parsed.results) ? parsed.results : [],
       medals: Array.isArray(parsed.medals) ? parsed.medals : []
@@ -108,9 +126,16 @@ function initialize() {
   $("#result-date").value = todayISO();
   $("#medal-date").value = todayISO();
   $("#profile-name").value = data.profile.name;
+  $("#profile-email").value = data.profile.email;
+  $("#profile-club").value = data.profile.club;
+  $("#profile-gender").value = data.profile.gender;
+  $("#profile-notifications").value = data.profile.notifications;
+  $("#profile-language").value = data.profile.language;
   updateConnection();
   renderAll();
   renderBottomTabs("training");
+  renderSports();
+  renderProfile();
   addRound();
   renderTimer();
 
@@ -127,12 +152,12 @@ function initialize() {
 let lastMainScreen = "training";
 let currentTrainingTab = "timer";
 let currentProgressTab = "chart";
+let currentCompetitionTab = "add-sport";
 
 function showScreen(screenName) {
   const validScreens = ["training", "competitions", "progress", "profile"];
   if (!validScreens.includes(screenName)) return;
   $$(".screen").forEach((screen) => { screen.hidden = screen.id !== `screen-${screenName}`; });
-  const mainScreen = screenName === "profile" ? lastMainScreen : screenName;
   if (screenName !== "profile") lastMainScreen = screenName;
   renderBottomTabs(screenName === "profile" ? "profile" : screenName);
   closeMenu();
@@ -174,22 +199,29 @@ const BOTTOM_TABS = {
     { key: "chart", label: "Grafikon", icon: '<path d="M3 3v18h18M7 14l4-4 3 3 6-7m0 0h-5m5 0v5" />' },
     { key: "results", label: "Eredmények", icon: '<path d="M8 3h8v3a4 4 0 0 1-8 0V3Zm0 2H5v2a4 4 0 0 0 4 4m7-6h3v2a4 4 0 0 1-4 4m-3 0v5m-4 4h8m-7-4h6v4H9z" />' },
     { key: "medals", label: "Érmek", icon: '<circle cx="12" cy="9" r="5" /><path d="m9 13-1 8 4-2 4 2-1-8M10 9l1.2 1.2L14 7" />' }
+  ],
+  competitions: [
+    { key: "add-sport", label: "Sportág hozzáadása", icon: '<path d="M12 5v14m-7-7h14" />' }
   ]
 };
 
 function renderBottomTabs(screen) {
   const nav = $("#bottom-nav");
-  if (screen !== "training" && screen !== "progress") {
+  if (!BOTTOM_TABS[screen]) {
     nav.hidden = true;
     nav.innerHTML = "";
     return;
   }
   const isTraining = screen === "training";
   const tabs = BOTTOM_TABS[screen];
-  const selectedTab = isTraining ? currentTrainingTab : currentProgressTab;
+  const selectedTab = isTraining
+    ? currentTrainingTab
+    : screen === "progress" ? currentProgressTab : currentCompetitionTab;
   const selectedIndex = tabs.findIndex((tab) => tab.key === selectedTab);
   nav.hidden = false;
-  nav.setAttribute("aria-label", isTraining ? "Edzési eszközök" : "Fejlődési nézetek");
+  nav.setAttribute("aria-label", isTraining
+    ? "Edzési eszközök"
+    : screen === "progress" ? "Fejlődési nézetek" : "Versenysportok");
   nav.style.setProperty("--segments", String(tabs.length));
   nav.style.setProperty("--segment", String(Math.max(0, selectedIndex)));
   nav.innerHTML = `<span class="segment-pill" aria-hidden="true"></span>${tabs.map((tab) => `
@@ -199,7 +231,7 @@ function renderBottomTabs(screen) {
   if (isTraining) {
     $("#timer-panel").hidden = currentTrainingTab !== "timer";
     $("#workouts-panel").hidden = currentTrainingTab !== "workouts";
-  } else {
+  } else if (screen === "progress") {
     PROGRESS_TABS.forEach((tab) => { $(`#progress-${tab}`).hidden = tab !== currentProgressTab; });
   }
 }
@@ -222,11 +254,51 @@ $("#bottom-nav").addEventListener("click", (event) => {
     currentTrainingTab = bottomTab;
     $("#timer-panel").hidden = bottomTab !== "timer";
     $("#workouts-panel").hidden = bottomTab !== "workouts";
-  } else {
+  } else if (currentScreen === "progress") {
     currentProgressTab = bottomTab;
     PROGRESS_TABS.forEach((tab) => { $(`#progress-${tab}`).hidden = tab !== bottomTab; });
     if (bottomTab === "chart") renderProgress();
+  } else if (currentScreen === "competitions" && bottomTab === "add-sport") {
+    openSportPicker();
   }
+});
+
+function renderSports() {
+  $("#sport-empty").hidden = data.sports.length > 0;
+  $("#sport-list").innerHTML = data.sports.map((sport) => `
+    <article class="sport-card">
+      <span>${escapeHTML(sport)}</span>
+      <button class="round-action secondary-action" type="button" data-remove-sport="${escapeHTML(sport)}" aria-label="${escapeHTML(sport)} eltávolítása">×</button>
+    </article>`).join("");
+  const available = SPORTS.filter((sport) => !data.sports.includes(sport));
+  $("#sport-select").innerHTML = available.length
+    ? available.map((sport) => `<option value="${escapeHTML(sport)}">${escapeHTML(sport)}</option>`).join("")
+    : '<option value="">Minden sportág hozzá van adva</option>';
+  $("#sport-select").disabled = available.length === 0;
+  $("#add-sport-confirm").disabled = available.length === 0;
+}
+
+function openSportPicker() {
+  $("#sport-picker").hidden = false;
+  renderSports();
+}
+
+$("#close-sport-picker").addEventListener("click", () => { $("#sport-picker").hidden = true; });
+$("#add-sport-confirm").addEventListener("click", () => {
+  const sport = $("#sport-select").value;
+  if (!SPORTS.includes(sport) || data.sports.includes(sport)) return;
+  data.sports.push(sport);
+  saveData(`${sport} hozzáadva.`);
+  renderSports();
+  if (data.sports.length === SPORTS.length) $("#sport-picker").hidden = true;
+});
+
+$("#sport-list").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-remove-sport]");
+  if (!button) return;
+  data.sports = data.sports.filter((sport) => sport !== button.dataset.removeSport);
+  saveData("Sportág eltávolítva.");
+  renderSports();
 });
 
 let pendingInstall;
@@ -1055,9 +1127,20 @@ $("#medal-form").addEventListener("submit", (event) => {
 
 $("#profile-form").addEventListener("submit", (event) => {
   event.preventDefault();
+  data.profile.email = $("#profile-email").value.trim().slice(0, 120);
   data.profile.name = $("#profile-name").value.trim().slice(0, 40);
-  saveData(data.profile.name ? `Szia, ${data.profile.name}! Elmentettük a profilodat.` : "Elmentettük a beállításaidat.");
+  data.profile.club = $("#profile-club").value.trim().slice(0, 80);
+  data.profile.gender = $("#profile-gender").value;
+  data.profile.notifications = $("#profile-notifications").value;
+  data.profile.language = $("#profile-language").value;
+  saveData("Elmentettük a profilbeállításaidat.");
+  renderProfile();
 });
+
+function renderProfile() {
+  const name = data.profile.name.trim();
+  document.title = name ? `Motivapp · ${name}` : "Motivapp — Edzés a saját ritmusodban";
+}
 
 function renderAll() {
   renderWorkouts();

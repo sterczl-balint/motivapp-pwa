@@ -9,9 +9,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Motivapp" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icons/icon.svg?v=5" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icons/icon-180.png?v=5" />
-    <link rel="stylesheet" href="./styles.css?v=15" />
+    <link rel="icon" href="./icons/icon.svg?v=6" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png?v=6" />
+    <link rel="stylesheet" href="./styles.css?v=17" />
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
   <body>
@@ -109,9 +109,7 @@
 
         <section id="screen-competitions" class="screen" aria-labelledby="competitions-title" hidden>
           <div class="page-heading">
-            <p class="eyebrow">KAPCSOLÓDJ ÉS INDULJ</p>
             <h1 id="competitions-title">Versenyek<span class="heading-dot">.</span></h1>
-            <p class="page-subtitle">Fedezd fel, mi vár rád a következő rajtvonalnál.</p>
           </div>
           <div class="competition-state neumorph-card" aria-live="polite">
             <svg class="cable-art" viewBox="0 0 240 160" role="img" aria-label="Elszakadt internetkábel">
@@ -128,7 +126,17 @@
             <p id="competition-description">A versenyek megtekintéséhez csatlakozz az internethez. Az edzéseid és a fejlődésed addig is elérhető offline.</p>
             <button id="retry-connection" class="secondary-button" type="button">Újrapróbálás</button>
           </div>
-          <p class="privacy-note centered-note"><span class="privacy-dot"></span> Az edzésadataid offline is biztonságban vannak.</p>
+          <section class="sports-panel">
+            <h2>Saját sportjaim</h2>
+            <div id="sport-list" class="sport-list"></div>
+            <p id="sport-empty" class="empty-state">Adj hozzá egy sportágat a + gombbal.</p>
+          </section>
+          <div id="sport-picker" class="sport-picker neumorph-card" hidden>
+            <div class="form-heading"><h3>Sportág hozzáadása</h3><button id="close-sport-picker" class="icon-button close-button" type="button" aria-label="Bezárás">×</button></div>
+            <label class="field-label" for="sport-select">Sportág</label>
+            <select id="sport-select" class="text-field"></select>
+            <button id="add-sport-confirm" class="primary-action save-workout-button" type="button">Hozzáadás</button>
+          </div>
         </section>
 
         <section id="screen-progress" class="screen" aria-labelledby="progress-title" hidden>
@@ -185,7 +193,15 @@
           <form id="profile-form" class="form-card neumorph-card profile-form">
             <div class="profile-avatar large-avatar" aria-hidden="true"><svg class="person-icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3" /><path d="M5 20a7 7 0 0 1 14 0" /></svg></div>
             <h2 id="profile-title">Beállítások</h2>
-            <label class="field-label" for="profile-name">Hogy szólíthatunk?</label><input id="profile-name" class="text-field" maxlength="40" placeholder="A neved" />
+            <label class="field-label" for="profile-email">E-mail cím</label><input id="profile-email" class="text-field" type="email" maxlength="120" autocomplete="email" placeholder="nev@pelda.hu" />
+            <label class="field-label" for="profile-name">Név</label><input id="profile-name" class="text-field" maxlength="40" autocomplete="name" placeholder="A neved" />
+            <label class="field-label" for="profile-club">Egyesület</label><input id="profile-club" class="text-field" maxlength="80" autocomplete="organization" placeholder="Egyesület neve" />
+            <label class="field-label" for="profile-gender">Nem</label>
+            <select id="profile-gender" class="text-field"><option value="">Nincs megadva</option><option value="male">Férfi</option><option value="female">Női</option></select>
+            <label class="field-label" for="profile-notifications">Értesítések</label>
+            <select id="profile-notifications" class="text-field"><option value="all">Minden értesítés</option><option value="competitions">Csak versenyek előtt</option><option value="in-app">Csak az appban</option></select>
+            <label class="field-label" for="profile-language">Nyelv</label>
+            <select id="profile-language" class="text-field"><option value="hu">Magyar</option><option value="de">Német</option><option value="en">Angol</option><option value="es">Spanyol</option><option value="zh">Kínai</option></select>
             <p class="privacy-note"><span class="privacy-dot"></span> A profilod és minden edzésadatod csak ezen a készüléken tárolódik.</p>
             <button class="primary-action save-workout-button" type="submit">Beállítások mentése</button>
           </form>
@@ -196,6 +212,6 @@
       <nav class="bottom-nav" id="bottom-nav" aria-label="Edzés fülek" hidden></nav>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=10" defer></script>
+    <script src="./app.js?v=12" defer></script>
   </body>
 </html>
