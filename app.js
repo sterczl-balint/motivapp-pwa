@@ -12,13 +12,14 @@ const PROGRESS_TABS = ["chart", "results", "medals"];
 const defaults = {
   profile: { name: "" },
   workouts: [],
+  recentWorkoutNames: [],
   sessions: [],
   results: [],
   medals: []
 };
 
 function freshData() {
-  return { profile: { ...defaults.profile }, workouts: [], sessions: [], results: [], medals: [] };
+  return { profile: { ...defaults.profile }, workouts: [], recentWorkoutNames: [], sessions: [], results: [], medals: [] };
 }
 
 function readData() {
@@ -29,6 +30,9 @@ function readData() {
     return {
       profile: { ...defaults.profile, ...(parsed.profile || {}) },
       workouts: Array.isArray(parsed.workouts) ? parsed.workouts : [],
+      recentWorkoutNames: Array.isArray(parsed.recentWorkoutNames)
+        ? parsed.recentWorkoutNames.filter((name) => typeof name === "string")
+        : [],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       results: Array.isArray(parsed.results) ? parsed.results : [],
       medals: Array.isArray(parsed.medals) ? parsed.medals : []
@@ -533,7 +537,14 @@ function addRound() {
   row.innerHTML = `
     <div class="round-topline"><span>${number}. kör</span><button class="round-remove" type="button" aria-label="Kör törlése">Törlés</button></div>
     <div class="round-fields">
-      <label class="mini-field time-field"><span>Idő (perc:másodperc)</span><input class="text-field" data-field="time" type="text" inputmode="numeric" pattern="[0-9]{1,3}:[0-5][0-9]" placeholder="01:00" value="01:00" required></label>
+      <div class="mini-field time-field" role="group" aria-label="Idő">
+        <div class="time-wheel-units" aria-hidden="true"><span>h</span><span>min</span><span>sec</span></div>
+        <div class="time-wheel-columns">
+          ${createWheelPicker("time-hours", 0, "óra", 0, 99, 1)}
+          ${createWheelPicker("time-minutes", 1, "perc", 0, 59, 1)}
+          ${createWheelPicker("time-seconds", 0, "másodperc", 0, 59, 1)}
+        </div>
+      </div>
       <div class="mini-field"><span>Gól</span>${createWheelPicker("goals", 0, "gól", 0, 99999, 1)}</div>
       <div class="mini-field"><span>Ismétlés</span>${createWheelPicker("reps", 10, "ism.", 0, 99999, 1)}</div>
       <div class="mini-field"><span>Táv</span>${createWheelPicker("distance", 0, "km", 0, 999999, 0.1)}</div>
@@ -545,15 +556,22 @@ function addRound() {
 
 function formatWheelValue(value, step) {
   return Number(value).toLocaleString("hu-HU", {
+    minimumIntegerDigits: 1,
     minimumFractionDigits: step < 1 ? 1 : 0,
     maximumFractionDigits: step < 1 ? 1 : 0
   });
 }
 
+function formatTimeWheelValue(value) {
+  return String(Math.trunc(value)).padStart(2, "0");
+}
+
 function createWheelPicker(field, value, unit, minimum, maximum, step) {
-  const label = { goals: "Gól", reps: "Ismétlés", distance: "Táv" }[field];
-  return `<div class="wheel-picker" data-wheel="${field}" data-unit="${unit}" data-min="${minimum}" data-max="${maximum}" data-step="${step}" data-value="${value}" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuemin="${minimum}" aria-valuemax="${maximum}" aria-valuenow="${value}">
-    <span class="wheel-unit">${unit}</span>
+  const label = {
+    goals: "Gól", reps: "Ismétlés", distance: "Távolság",
+    "time-hours": "Óra", "time-minutes": "Perc", "time-seconds": "Másodperc"
+  }[field];
+  return `<div class="wheel-picker" data-wheel="${field}" data-unit="${unit}" data-min="${minimum}" data-max="${maximum}" data-step="${step}" data-value="${value}" data-unmeasured="false" role="spinbutton" tabindex="0" aria-label="${label}" aria-valuemin="${minimum}" aria-valuemax="${maximum}" aria-valuenow="${value}">
     <div class="wheel-track" aria-hidden="true">
       <button class="wheel-row" type="button" data-offset="-1" tabindex="-1"></button>
       <button class="wheel-row current-wheel-value" type="button" data-offset="0" tabindex="-1"></button>
@@ -568,26 +586,57 @@ function updateWheelPicker(picker) {
   const minimum = Number(picker.dataset.min);
   const maximum = Number(picker.dataset.max);
   const step = Number(picker.dataset.step);
+  const unmeasured = picker.dataset.unmeasured === "true";
   $$("[data-offset]", picker).forEach((button) => {
     const offset = Number(button.dataset.offset);
-    const next = value + offset * step;
-    const disabled = next < minimum || next > maximum;
-    button.disabled = disabled;
-    button.textContent = disabled ? (offset < 0 ? "⊘" : "") : formatWheelValue(next, step);
+    const next = unmeasured
+      ? (offset < 0 ? maximum : offset > 0 ? minimum : null)
+      : value + offset * step;
+    const unavailable = next !== null && (next < minimum || next > maximum);
+    button.disabled = false;
+    button.textContent = next === null || unavailable
+      ? "⊘"
+      : picker.dataset.wheel.startsWith("time-") ? formatTimeWheelValue(next) : formatWheelValue(next, step);
   });
-  $("[data-field]", picker).value = String(value);
-  picker.setAttribute("aria-valuenow", String(value));
-  picker.setAttribute("aria-valuetext", `${formatWheelValue(value, step)} ${picker.dataset.unit}`);
+  $("[data-field]", picker).value = unmeasured ? "" : String(value);
+  picker.setAttribute("aria-valuenow", String(unmeasured ? minimum : value));
+  picker.setAttribute("aria-valuetext", unmeasured
+    ? "Nem mérhető"
+    : `${picker.dataset.wheel.startsWith("time-") ? formatTimeWheelValue(value) : formatWheelValue(value, step)} ${picker.dataset.unit}`);
 }
 
 function setWheelValue(picker, value) {
+  if (value === null) {
+    picker.dataset.unmeasured = "true";
+    updateWheelPicker(picker);
+    return;
+  }
   const minimum = Number(picker.dataset.min);
   const maximum = Number(picker.dataset.max);
   const step = Number(picker.dataset.step);
   const bounded = Math.min(maximum, Math.max(minimum, value));
   const precision = step < 1 ? 1 : 0;
   picker.dataset.value = String(Number(bounded.toFixed(precision)));
+  picker.dataset.unmeasured = "false";
   updateWheelPicker(picker);
+}
+
+function getWheelValue(picker) {
+  return picker.dataset.unmeasured === "true" ? null : Number(picker.dataset.value);
+}
+
+function setWheelBySteps(picker, startValue, startUnmeasured, steps) {
+  if (steps === 0) {
+    setWheelValue(picker, startUnmeasured ? null : startValue);
+    return;
+  }
+  const minimum = Number(picker.dataset.min);
+  const maximum = Number(picker.dataset.max);
+  const step = Number(picker.dataset.step);
+  const firstValue = startUnmeasured ? (steps > 0 ? minimum : maximum) : startValue;
+  const adjustedSteps = startUnmeasured ? steps - Math.sign(steps) : steps;
+  const next = firstValue + adjustedSteps * step;
+  setWheelValue(picker, next < minimum || next > maximum ? null : next);
 }
 
 function handleWheelGesture(event) {
@@ -596,52 +645,102 @@ function handleWheelGesture(event) {
   const row = event.target.closest("[data-offset]");
   if (!row) return;
   event.preventDefault();
-  setWheelValue(picker, Number(picker.dataset.value) + Number(row.dataset.offset) * Number(picker.dataset.step));
+  setWheelBySteps(
+    picker,
+    Number(picker.dataset.value),
+    picker.dataset.unmeasured === "true",
+    Number(row.dataset.offset)
+  );
 }
 
 let activeWheelDrag = null;
+let wheelInertiaFrame = 0;
+let suppressWheelClick = false;
 $("#round-list").addEventListener("pointerdown", (event) => {
   const picker = event.target.closest(".wheel-picker");
-  if (!picker || event.target.closest("button") || event.button > 0) return;
+  if (!picker || event.button > 0) return;
   event.preventDefault();
+  if (wheelInertiaFrame) cancelAnimationFrame(wheelInertiaFrame);
+  wheelInertiaFrame = 0;
   const track = $(".wheel-track", picker);
   track.setPointerCapture(event.pointerId);
+  const now = performance.now();
   activeWheelDrag = {
     picker,
+    pointerId: event.pointerId,
     startY: event.clientY,
     startValue: Number(picker.dataset.value),
-    lastSteps: 0
+    startUnmeasured: picker.dataset.unmeasured === "true",
+    lastSteps: 0,
+    lastY: event.clientY,
+    lastMoveAt: now,
+    maxDistance: 0,
+    samples: [{ y: event.clientY, time: now }]
   };
 });
 
 $("#round-list").addEventListener("pointermove", (event) => {
-  if (!activeWheelDrag || !event.target.closest(".wheel-picker")) return;
+  if (!activeWheelDrag || event.pointerId !== activeWheelDrag.pointerId) return;
   const steps = Math.trunc((activeWheelDrag.startY - event.clientY) / 25);
-  if (steps === activeWheelDrag.lastSteps) return;
-  activeWheelDrag.lastSteps = steps;
-  const step = Number(activeWheelDrag.picker.dataset.step);
-  setWheelValue(activeWheelDrag.picker, activeWheelDrag.startValue + steps * step);
+  if (steps !== activeWheelDrag.lastSteps) {
+    activeWheelDrag.lastSteps = steps;
+    setWheelBySteps(activeWheelDrag.picker, activeWheelDrag.startValue, activeWheelDrag.startUnmeasured, steps);
+  }
+  const now = performance.now();
+  activeWheelDrag.maxDistance = Math.max(activeWheelDrag.maxDistance, Math.abs(event.clientY - activeWheelDrag.startY));
+  activeWheelDrag.lastY = event.clientY;
+  activeWheelDrag.lastMoveAt = now;
+  activeWheelDrag.samples.push({ y: event.clientY, time: now });
+  activeWheelDrag.samples = activeWheelDrag.samples.filter((sample) => now - sample.time <= 120);
 });
 
-function finishWheelDrag() {
+function finishWheelDrag(event, allowInertia = true) {
+  if (!activeWheelDrag || (event && event.pointerId !== activeWheelDrag.pointerId)) return;
+  const drag = activeWheelDrag;
   activeWheelDrag = null;
+  if (drag.maxDistance > 8) {
+    suppressWheelClick = true;
+    window.setTimeout(() => { suppressWheelClick = false; }, 350);
+  }
+  if (!allowInertia || performance.now() - drag.lastMoveAt > 110 || drag.samples.length < 2) return;
+  const first = drag.samples[0];
+  const last = drag.samples[drag.samples.length - 1];
+  const elapsed = last.time - first.time;
+  if (elapsed < 1) return;
+  const velocity = (first.y - last.y) / elapsed / 25;
+  if (Math.abs(velocity) < 0.003) return;
+  const duration = Math.min(900, Math.max(100, Math.abs(velocity) * 25 * 1600));
+  const totalSteps = velocity * duration / 2;
+  const startedAt = performance.now();
+  let appliedSteps = 0;
+  const animateInertia = (now) => {
+    const progress = Math.min(1, (now - startedAt) / duration);
+    const nextSteps = totalSteps * (1 - (1 - progress) ** 2);
+    const stepChange = Math.trunc(nextSteps) - Math.trunc(appliedSteps);
+    if (stepChange !== 0) {
+      drag.lastSteps += stepChange;
+      setWheelBySteps(drag.picker, drag.startValue, drag.startUnmeasured, drag.lastSteps);
+    }
+    appliedSteps = nextSteps;
+    if (progress < 1) wheelInertiaFrame = requestAnimationFrame(animateInertia);
+    else wheelInertiaFrame = 0;
+  };
+  wheelInertiaFrame = requestAnimationFrame(animateInertia);
 }
-$("#round-list").addEventListener("pointerup", finishWheelDrag);
-$("#round-list").addEventListener("pointercancel", finishWheelDrag);
+$("#round-list").addEventListener("pointerup", (event) => finishWheelDrag(event));
+$("#round-list").addEventListener("pointercancel", (event) => finishWheelDrag(event, false));
 
 $("#round-list").addEventListener("keydown", (event) => {
   if (!event.target.matches(".wheel-picker") || !["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(event.key)) return;
   event.preventDefault();
   const picker = event.target;
   const step = Number(picker.dataset.step);
-  const change = event.key === "ArrowUp" ? step
-    : event.key === "ArrowDown" ? -step
-      : event.key === "PageUp" ? step * 10
-        : event.key === "PageDown" ? -step * 10
-          : null;
   if (event.key === "Home") setWheelValue(picker, Number(picker.dataset.min));
   else if (event.key === "End") setWheelValue(picker, Number(picker.dataset.max));
-  else setWheelValue(picker, Number(picker.dataset.value) + change);
+  else {
+    const stepCount = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : event.key === "PageUp" ? 10 : -10;
+    setWheelBySteps(picker, Number(picker.dataset.value), picker.dataset.unmeasured === "true", stepCount);
+  }
 });
 
 function updateRoundNumbers() {
@@ -653,6 +752,11 @@ function updateRoundNumbers() {
 
 $("#add-round-button").addEventListener("click", addRound);
 $("#round-list").addEventListener("click", (event) => {
+  if (suppressWheelClick && event.target.closest(".wheel-picker [data-offset]")) {
+    event.preventDefault();
+    suppressWheelClick = false;
+    return;
+  }
   handleWheelGesture(event);
   const row = event.target.closest(".round-editor");
   if (!row) return;
@@ -667,27 +771,61 @@ $("#round-list").addEventListener("click", (event) => {
   }
 });
 
-function parseRoundTime(value) {
-  const match = /^(\d{1,3}):([0-5]\d)$/.exec(value);
-  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+function roundSeconds(row) {
+  const hours = getWheelValue($('.wheel-picker[data-wheel="time-hours"]', row));
+  const minutes = getWheelValue($('.wheel-picker[data-wheel="time-minutes"]', row));
+  const seconds = getWheelValue($('.wheel-picker[data-wheel="time-seconds"]', row));
+  return hours === null || minutes === null || seconds === null
+    ? null
+    : hours * 3600 + minutes * 60 + seconds;
 }
+
+function renderWorkoutNameSuggestions() {
+  const query = $("#workout-name").value.trim().toLocaleLowerCase("hu-HU");
+  const recentWorkouts = data.workouts
+    .map((workout, index) => ({ workout, index, created: Date.parse(workout.createdAt || "") }))
+    .sort((a, b) => {
+      const aCreated = Number.isFinite(a.created) ? a.created : -a.index;
+      const bCreated = Number.isFinite(b.created) ? b.created : -b.index;
+      return bCreated - aCreated;
+    })
+    .map(({ workout }) => workout.name);
+  const names = query
+    ? recentWorkouts.filter((name) => String(name).toLocaleLowerCase("hu-HU").includes(query))
+    : data.recentWorkoutNames.length ? data.recentWorkoutNames : recentWorkouts;
+  const uniqueNames = [];
+  const seen = new Set();
+  for (const name of names) {
+    const key = String(name).trim().toLocaleLowerCase("hu-HU");
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniqueNames.push(String(name).trim());
+    if (uniqueNames.length === 3) break;
+  }
+  $("#workout-name-suggestions").innerHTML = uniqueNames
+    .map((name) => `<option value="${escapeHTML(name)}"></option>`).join("");
+}
+
+$("#workout-name").addEventListener("focus", renderWorkoutNameSuggestions);
+$("#workout-name").addEventListener("input", renderWorkoutNameSuggestions);
 
 $("#workout-form").addEventListener("submit", (event) => {
   event.preventDefault();
   const name = $("#workout-name").value.trim();
   const rows = $$(".round-editor", $("#round-list"));
   const rounds = rows.map((row) => ({
-    seconds: parseRoundTime($('[data-field="time"]', row).value),
-    goals: clampInteger($('[data-field="goals"]', row).value, 0, 99999, 0),
-    reps: clampInteger($('[data-field="reps"]', row).value, 0, 99999, 0),
-    distance: Math.max(0, Number($('[data-field="distance"]', row).value) || 0),
+    seconds: roundSeconds(row),
+    goals: getWheelValue($('.wheel-picker[data-wheel="goals"]', row)),
+    reps: getWheelValue($('.wheel-picker[data-wheel="reps"]', row)),
+    distance: getWheelValue($('.wheel-picker[data-wheel="distance"]', row)),
     goal: $('[data-field="goal"]', row).value.trim()
   }));
-  if (!name || rounds.some((round) => round.seconds === null)) {
-    showToast("Ellenőrizd az edzés nevét és a körök idejét (például 01:30).");
+  if (!name) {
+    showToast("Adj nevet az edzésnek.");
     return;
   }
   data.workouts.unshift({ id: makeId(), name, rounds, createdAt: new Date().toISOString() });
+  data.recentWorkoutNames = [name, ...data.recentWorkoutNames.filter((recent) => recent !== name)].slice(0, 3);
   saveData("Elmentettük az új edzésedet.");
   $("#workout-form").reset();
   $("#round-list").innerHTML = "";
@@ -698,6 +836,7 @@ $("#workout-form").addEventListener("submit", (event) => {
 
 $("#add-workout-button").addEventListener("click", () => {
   $("#workout-form").hidden = false;
+  renderWorkoutNameSuggestions();
 });
 $("#close-workout-form").addEventListener("click", () => { $("#workout-form").hidden = true; });
 
@@ -706,12 +845,21 @@ function renderWorkouts() {
   $("#workout-empty").hidden = data.workouts.length > 0;
   list.innerHTML = data.workouts.map((workout) => {
     const roundCount = workout.rounds.length;
-    const totalTime = workout.rounds.reduce((sum, round) => sum + (Number(round.seconds) || 0), 0);
-    const goals = workout.rounds.reduce((sum, round) => sum + (Number(round.goals) || 0), 0);
-    const reps = workout.rounds.reduce((sum, round) => sum + (Number(round.reps) || 0), 0);
-    const distance = workout.rounds.reduce((sum, round) => sum + (Number(round.distance) || 0), 0);
-    const details = [`${roundCount} kör`, formatDuration(totalTime), `${goals} gól`, `${reps} ismétlés`];
-    if (distance > 0) details.push(`${distance.toLocaleString("hu-HU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`);
+    const totalMeasured = (field) => {
+      const values = workout.rounds.map((round) => round[field]).filter((value) => Number.isFinite(value));
+      return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
+    };
+    const totalTime = totalMeasured("seconds");
+    const goals = totalMeasured("goals");
+    const reps = totalMeasured("reps");
+    const distance = totalMeasured("distance");
+    const details = [
+      `${roundCount} kör`,
+      totalTime === null ? "—" : formatDuration(totalTime),
+      `${goals === null ? "—" : goals} gól`,
+      `${reps === null ? "—" : reps} ism.`
+    ];
+    if (distance !== null) details.push(`${distance.toLocaleString("hu-HU", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`);
     return `<article class="workout-card">
       <div class="workout-card-top"><div><h3>${escapeHTML(workout.name)}</h3><p class="card-meta">${details.join(" · ")}</p></div><svg class="workout-icon runner-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="16.5" cy="4.5" r="2" /><path d="m13.5 8-3 4.5 3.5 2 3.5 4M10.5 12.5l-4 2.5m7.5-7 4 1.5 2.5 3M12 14.5l-2 5m7-2 3 3" /></svg></div>
       <div class="card-actions"><button class="small-action" type="button" data-complete-workout="${escapeHTML(workout.id)}">✓ Edzés elvégzése</button><button class="small-action delete-action" type="button" data-delete-workout="${escapeHTML(workout.id)}">Törlés</button></div>

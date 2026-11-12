@@ -9,9 +9,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Motivapp" />
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./icons/icon.svg?v=3" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icons/icon-180.png?v=3" />
-    <link rel="stylesheet" href="./styles.css?v=13" />
+    <link rel="icon" href="./icons/icon.svg?v=5" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-180.png?v=5" />
+    <link rel="stylesheet" href="./styles.css?v=15" />
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
   <body>
@@ -49,7 +49,7 @@
           <div class="page-heading">
             <p class="eyebrow" id="today-label"></p>
             <h1 id="training-title">Edzés<span class="heading-dot">.</span></h1>
-            <p class="page-subtitle">A mai nap is számít. Kezdj bele a saját tempódban.</p>
+            <p class="page-subtitle">Kezdd a saját tempódban.</p>
           </div>
           <div id="timer-panel" class="training-panel">
             <section class="timer-card neumorph-card" aria-label="Edzés időzítő">
@@ -94,15 +94,16 @@
               <button id="add-workout-button" class="add-button" type="button"><span>+</span> Új edzés</button>
             </div>
             <form id="workout-form" class="form-card neumorph-card" hidden>
-              <div class="form-heading"><div><p class="eyebrow">ÚJ TERV</p><h3>Edzés összeállítása</h3></div><button id="close-workout-form" class="icon-button close-button" type="button" aria-label="Bezárás">×</button></div>
+              <div class="form-heading"><div><h3>Új edzés</h3></div><button id="close-workout-form" class="icon-button close-button" type="button" aria-label="Bezárás">×</button></div>
               <label class="field-label" for="workout-name">Edzés neve</label>
-              <input id="workout-name" class="text-field" type="text" maxlength="60" placeholder="Például: Reggeli erősítés" required />
+              <input id="workout-name" class="text-field" type="text" list="workout-name-suggestions" maxlength="60" placeholder="Edzés neve" autocomplete="off" required />
+              <datalist id="workout-name-suggestions"></datalist>
               <div class="round-heading"><span class="field-label">Körök</span><button id="add-round-button" class="small-add-button" type="button">+ Kör hozzáadása</button></div>
               <div id="round-list" class="round-list"></div>
               <button class="primary-action save-workout-button" type="submit">Edzés mentése</button>
             </form>
             <div id="workout-list" class="workout-list"></div>
-            <p id="workout-empty" class="empty-state">Még nincs elmentett edzésed. Állítsd össze az elsőt, és igazítsd a saját céljaidhoz.</p>
+            <p id="workout-empty" class="empty-state">Még nincs elmentett edzés.</p>
           </div>
         </section>
 
@@ -195,6 +196,6 @@
       <nav class="bottom-nav" id="bottom-nav" aria-label="Edzés fülek" hidden></nav>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=8" defer></script>
+    <script src="./app.js?v=10" defer></script>
   </body>
 </html>
