@@ -26,10 +26,12 @@
 
 body {
   min-width: 320px;
-  min-height: 100vh;
-  min-height: 100svh;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   overscroll-behavior-y: none;
   background:
     radial-gradient(ellipse at 8% 0%, rgba(60, 106, 190, .16), transparent 32rem),
@@ -49,13 +51,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   position: relative;
   display: flex;
   width: min(100%, 560px);
-  height: 100vh;
-  height: 100svh;
-  min-height: 100vh;
-  min-height: 100svh;
+  height: 100%;
+  min-height: 0;
   margin: 0 auto;
   flex-direction: column;
-  overflow: visible;
+  overflow: hidden;
   background: linear-gradient(155deg, rgba(30, 43, 62, .67), rgba(17, 21, 27, .47) 48%, rgba(27, 30, 43, .73));
   border-right: 1px solid rgba(255,255,255,.025);
   border-left: 1px solid rgba(255,255,255,.025);
@@ -171,17 +171,23 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 
 .main-content {
   width: 100%;
-  padding: 26px 23px calc(114px + env(safe-area-inset-bottom));
-  flex: 1 0 auto;
+  min-height: 0;
+  padding: 10px 23px calc(92px + env(safe-area-inset-bottom));
+  flex: 1 1 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
 }
+.main-content::-webkit-scrollbar { display: none; }
 
 .screen[hidden], .training-panel[hidden], .progress-panel[hidden], .form-card[hidden] { display: none; }
-.page-heading { margin: 8px 0 24px; }
+.page-heading { margin: 0 0 8px; }
 .screen:not(#screen-profile) .page-heading h1,
 .screen:not(#screen-profile) .page-heading .page-subtitle { display: none; }
 .screen-tabs {
   width: 100%;
-  margin-top: 16px;
+  margin-top: 0;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -199,12 +205,12 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .screen-tab {
   display: flex;
   min-width: 0;
-  min-height: 82px;
-  padding: 4px 2px;
+  min-height: 58px;
+  padding: 2px;
   align-items: center;
   justify-content: flex-start;
   flex-direction: column;
-  gap: 6px;
+  gap: 3px;
   color: var(--muted);
   background: none;
   border: 0;
@@ -215,8 +221,8 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .screen-tab:hover { transform: translateY(-1px); }
 .screen-tab-icon {
   display: grid;
-  width: 44px;
-  height: 44px;
+  width: 38px;
+  height: 38px;
   flex: 0 0 auto;
   place-items: center;
   color: inherit;
@@ -312,16 +318,14 @@ h1 {
 }
 
 .timer-card {
-  margin-top: 21px;
+  margin-top: 8px;
   padding: 17px 18px 14px;
   overflow: visible;
 }
 .timer-mode-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mode-overline { color: var(--faint); font-size: 9px; font-weight: 720; letter-spacing: 1.3px; }
 .timer-dial {
-  --mode-angle: 0deg;
   --dial-size: min(76vw, 36svh, 286px, calc(100vw - 96px));
-  --indicator-radius: min(calc(38vw - 5px), calc(18svh - 5px), 138px, calc(50vw - 53px));
   position: relative;
   display: grid;
   width: var(--dial-size);
@@ -332,20 +336,6 @@ h1 {
   border-radius: 50%;
   box-shadow: 8px 8px 18px #0c0f13, -7px -7px 17px #252e3a, inset 0 0 0 1px rgba(255,255,255,.025);
   touch-action: pan-y;
-}
-.dial-notch {
-  z-index: 4;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 21px;
-  height: 25px;
-  background: var(--mint);
-  clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%);
-  filter: drop-shadow(0 0 5px rgba(101,246,202,.8));
-  transform: translate(-50%, -50%) rotate(var(--mode-angle)) translateY(calc(0px - var(--indicator-radius)));
-  transition: transform .42s cubic-bezier(.2,.8,.2,1);
-  pointer-events: none;
 }
 .dial-mode-labels { position: relative; z-index: 3; display: flex; justify-content: center; gap: 12px; pointer-events: auto; }
 .dial-mode-label {
@@ -371,8 +361,6 @@ h1 {
 }
 .dial-mode-label:disabled { opacity: .48; cursor: not-allowed; }
 .dial-mode-label.active:disabled { opacity: 1; }
-.timer-dial.is-working .dial-notch { background: #ff6b73; filter: drop-shadow(0 0 6px rgba(255,87,105,.85)); }
-.timer-dial.is-resting .dial-notch { background: var(--cyan); filter: drop-shadow(0 0 6px rgba(98,221,255,.85)); }
 .timer-card.is-working .dial-mode-label.active { color: #ff7b83; border-color: rgba(255,107,115,.34); }
 .timer-card.is-resting .dial-mode-label.active { color: var(--cyan); border-color: rgba(98,221,255,.34); }
 .timer-mode-row { justify-content: center; }
@@ -725,14 +713,14 @@ body.sheet-open { overflow: hidden; }
 
 .bottom-nav {
   z-index: 4;
-  position: fixed;
-  bottom: calc(13px + env(safe-area-inset-bottom, 0px));
+  position: absolute;
+  bottom: 0;
   left: 50%;
   display: block;
   width: min(calc(100% - 24px), 480px);
   min-height: 78px;
   overflow-x: auto;
-  padding: 5px;
+  padding: 5px 5px calc(5px + env(safe-area-inset-bottom, 0px));
   background: linear-gradient(140deg, rgba(38, 48, 64, .97), rgba(25, 31, 42, .97) 72%, rgba(25, 40, 42, .97));
   border: 1px solid rgba(211,231,247,.07);
   border-radius: 24px;

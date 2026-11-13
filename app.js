@@ -7,7 +7,6 @@ const MODE_LABELS = {
   interval: "Munka / pihenő",
   countdown: "Visszaszámláló"
 };
-const TIMER_MODE_ANGLES = [0, 32, 64];
 const PROGRESS_TABS = ["chart", "results", "medals"];
 const SPORTS = [
   "Foci",
@@ -782,6 +781,7 @@ let restSeconds = 15;
 let intervalRounds = 4;
 let intervalRound = 1;
 let timerLaps = [];
+let timerAudioContext = null;
 
 function getPhaseDuration() {
   if (timerMode === "interval") return isWorkPhase ? workSeconds : restSeconds;
@@ -843,8 +843,6 @@ function clampInteger(value, minimum, maximum, fallback) {
 }
 
 function renderTimer() {
-  const modeIndex = TIMER_MODES.indexOf(timerMode);
-  $("#timer-dial").style.setProperty("--mode-angle", `${TIMER_MODE_ANGLES[modeIndex]}deg`);
   $$(".dial-mode-label").forEach((label) => {
     const active = label.dataset.mode === timerMode;
     label.classList.toggle("active", active);
@@ -946,6 +944,7 @@ function advanceTimer(delta) {
 }
 
 function startTimer() {
+  resumeTimerAudio();
   if (timerMode === "countdown" && timerElapsed >= countdownSeconds) {
     timerElapsed = 0;
     loggedTimerElapsed = 0;
@@ -966,8 +965,60 @@ function startTimer() {
     const now = performance.now();
     const delta = Math.min(1, (now - lastTick) / 1000);
     lastTick = now;
-    if (delta > 0) advanceTimer(delta);
+    if (delta > 0) {
+      const previousPhaseRemaining = phaseRemaining;
+      const previousWorkPhase = isWorkPhase;
+      advanceTimer(delta);
+      if (timerMode === "interval" && timerRunning) {
+        if (isWorkPhase !== previousWorkPhase) {
+          playIntervalBeep(true);
+        } else {
+          const previousSecond = Math.ceil(previousPhaseRemaining);
+          const currentSecond = Math.ceil(phaseRemaining);
+          for (let second = Math.min(3, previousSecond - 1); second >= Math.max(1, currentSecond); second -= 1) {
+            playIntervalBeep();
+          }
+        }
+      }
+    }
   }, 50);
+}
+
+function resumeTimerAudio() {
+  const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextConstructor) return;
+  try {
+    if (!timerAudioContext) timerAudioContext = new AudioContextConstructor();
+    if (timerAudioContext.state === "suspended") {
+      timerAudioContext.resume().catch((error) => console.error("Az időzítő hangja nem indítható el.", error));
+    }
+  } catch (error) {
+    console.error("Az időzítő hangja nem indítható el.", error);
+  }
+}
+
+function playIntervalBeep(isPhaseChange = false) {
+  if (!timerAudioContext || timerAudioContext.state !== "running") return;
+  const playTone = (frequency, startTime, duration) => {
+    const oscillator = timerAudioContext.createOscillator();
+    const volume = timerAudioContext.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+    volume.gain.setValueAtTime(0.0001, startTime);
+    volume.gain.exponentialRampToValueAtTime(0.5, startTime + 0.015);
+    volume.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+    oscillator.connect(volume);
+    volume.connect(timerAudioContext.destination);
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration);
+  };
+  const now = timerAudioContext.currentTime;
+  if (isPhaseChange) {
+    playTone(523.25, now, 0.18);
+    playTone(1046.5, now + 0.2, 0.24);
+  } else {
+    playTone(880, now, 0.16);
+  }
 }
 
 function pauseTimer(save = true) {

@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "motivapp-shell-v36";
+const CACHE_NAME = "motivapp-shell-v37";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=24",
-  "./app.js?v=23",
+  "./styles.css?v=25",
+  "./app.js?v=24",
   "./vendor/lucide.min.js?v=1",
   "./manifest.webmanifest",
   "./icons/icon-180.png?v=7",
