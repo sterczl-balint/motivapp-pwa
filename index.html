@@ -11,15 +11,15 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png?v=7" type="image/png" />
     <link rel="apple-touch-icon" href="./icons/icon-180.png?v=7" />
-    <link rel="stylesheet" href="./styles.css?v=21" />
+    <link rel="stylesheet" href="./styles.css?v=24" />
     <script src="./vendor/lucide.min.js?v=1" defer></script>
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
   <body>
     <div class="app">
       <header class="topbar">
-        <button id="menu-button" class="icon-button menu-button" type="button" aria-label="Menü megnyitása" aria-expanded="false" aria-controls="menu-panel">
-          <i data-lucide="menu"></i>
+        <button id="profile-button" class="icon-button profile-button" type="button" aria-label="Profil beállítások" data-screen="profile">
+          <span class="profile-avatar" aria-hidden="true"><i data-lucide="user-round"></i></span>
         </button>
         <div class="brand" aria-label="Motivapp">
           <span class="brand-glyph" aria-hidden="true">m<span>.</span></span>
@@ -34,23 +34,13 @@
         </div>
       </header>
 
-      <nav id="menu-panel" class="menu-panel" aria-label="Főmenü" hidden>
-        <button class="menu-link profile-menu-link" type="button" data-screen="profile">
-          <span class="profile-avatar" aria-hidden="true"><i data-lucide="user-round"></i></span>
-          <span>Profil beállítások</span>
-        </button>
-        <span class="menu-divider"></span>
-        <button class="menu-link" type="button" data-screen="training"><i data-lucide="dumbbell"></i> Edzések</button>
-        <button class="menu-link" type="button" data-screen="competitions"><i data-lucide="flag-triangle-right"></i> Versenyek</button>
-        <button class="menu-link" type="button" data-screen="progress"><i data-lucide="chart-no-axes-combined"></i> Fejlődés</button>
-      </nav>
-
       <main id="main-content" class="main-content">
         <section id="screen-training" class="screen" aria-labelledby="training-title">
           <div class="page-heading">
             <p class="eyebrow" id="today-label"></p>
             <h1 id="training-title">Edzés<span class="heading-dot">.</span></h1>
             <p class="page-subtitle">Kezdd a saját tempódban.</p>
+            <nav class="screen-tabs" id="training-tabs" aria-label="Edzés nézetek"></nav>
           </div>
           <div id="timer-panel" class="training-panel">
             <section class="timer-card neumorph-card" aria-label="Edzés időzítő">
@@ -105,6 +95,7 @@
         <section id="screen-competitions" class="screen" aria-labelledby="competitions-title" hidden>
           <div class="page-heading">
             <h1 id="competitions-title">Versenyek<span class="heading-dot">.</span></h1>
+            <nav class="screen-tabs" id="competition-tabs" aria-label="Versenysportágak"></nav>
           </div>
           <div id="competition-state" class="competition-state neumorph-card" aria-live="polite" hidden>
             <i class="offline-icon" data-lucide="wifi-off" aria-hidden="true"></i>
@@ -123,6 +114,7 @@
             <p class="eyebrow">MINDEN LÉPÉS SZÁMÍT</p>
             <h1 id="progress-title">Fejlődés<span class="heading-dot">.</span></h1>
             <p class="page-subtitle">Nézd meg, mennyi mindent tettél már magadért.</p>
+            <nav class="screen-tabs" id="progress-tabs" aria-label="Fejlődési nézetek"></nav>
           </div>
           <div id="progress-chart" class="progress-panel">
             <section class="chart-card neumorph-card" aria-label="Heti edzésgrafikon">
@@ -188,7 +180,7 @@
         </section>
       </main>
 
-      <nav class="bottom-nav" id="bottom-nav" aria-label="Edzés fülek" hidden></nav>
+      <nav class="bottom-nav" id="bottom-nav" aria-label="Fő navigáció" hidden></nav>
     </div>
     <div id="sport-sheet-backdrop" class="sheet-backdrop" hidden>
       <section id="sport-picker" class="sport-picker" role="dialog" aria-modal="true" aria-labelledby="sport-picker-title">
@@ -201,6 +193,6 @@
       </section>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=21" defer></script>
+    <script src="./app.js?v=23" defer></script>
   </body>
 </html>

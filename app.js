@@ -21,11 +21,11 @@ const SPORTS = [
 const SPORT_OPTIONS = {
   "Foci": { label: "Foci", icon: "goal", source: "football" },
   "Jégkorong": { label: "Jégkorong", icon: "goal", source: "hockey" },
-  "Síkvízi kajak-kenu": { label: "Kajak", icon: "waves", source: "canoe" },
+  "Síkvízi kajak-kenu": { label: "Kajak", icon: "sailboat", source: "canoe" },
   "Evezés": { label: "Evezés", icon: "sailboat", source: "rowing" },
   "Vízilabda": { label: "Vízilabda", icon: "waves", source: "water-polo" },
-  "Szlalom kajak-kenu": { label: "Szlalom", icon: "waves", source: "canoe" },
-  "Kajakpóló": { label: "Kajakpóló", icon: "waves", source: "canoe" }
+  "Szlalom kajak-kenu": { label: "Szlalom", icon: "sailboat", source: "canoe" },
+  "Kajakpóló": { label: "Kajakpóló", icon: "sailboat", source: "canoe" }
 };
 const COMPETITION_SOURCES = {
   football: {
@@ -177,6 +177,7 @@ function initialize() {
   updateConnection();
   renderAll();
   renderBottomTabs("training");
+  renderScreenTabs("training");
   renderSports();
   renderProfile();
   addRound();
@@ -206,27 +207,13 @@ function showScreen(screenName) {
   if (!validScreens.includes(screenName)) return;
   $$(".screen").forEach((screen) => { screen.hidden = screen.id !== `screen-${screenName}`; });
   if (screenName !== "profile") lastMainScreen = screenName;
-  renderBottomTabs(screenName === "profile" ? "profile" : screenName);
-  closeMenu();
+  renderBottomTabs(lastMainScreen);
+  renderScreenTabs(screenName === "profile" ? null : screenName);
   if (screenName === "progress") renderProgress();
   if (screenName === "competitions") renderCompetitionState();
 }
 
-function closeMenu() {
-  $("#menu-panel").hidden = true;
-  $("#menu-button").setAttribute("aria-expanded", "false");
-  $("#menu-button").setAttribute("aria-label", "Menü megnyitása");
-}
-
-$("#menu-button").addEventListener("click", () => {
-  const open = $("#menu-panel").hidden;
-  $("#menu-panel").hidden = !open;
-  $("#menu-button").setAttribute("aria-expanded", String(open));
-  $("#menu-button").setAttribute("aria-label", open ? "Menü bezárása" : "Menü megnyitása");
-});
-
 document.addEventListener("click", (event) => {
-  if (!event.target.closest("#menu-panel, #menu-button") && !$("#menu-panel").hidden) closeMenu();
   const navTarget = event.target.closest("[data-screen]");
   if (navTarget) {
     event.preventDefault();
@@ -236,7 +223,6 @@ document.addEventListener("click", (event) => {
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
-    closeMenu();
     closeSportPicker();
   }
 });
@@ -271,35 +257,49 @@ function getBottomTabs(screen) {
 
 function renderBottomTabs(screen) {
   const nav = $("#bottom-nav");
-  const tabs = getBottomTabs(screen);
-  if (screen === "competitions" && !internetAvailable) {
-    nav.hidden = true;
-    nav.innerHTML = "";
-    return;
-  }
-  if (!tabs.length) {
-    nav.hidden = true;
-    nav.innerHTML = "";
-    return;
-  }
-  const isTraining = screen === "training";
-  const selectedTab = isTraining ? currentTrainingTab
-    : screen === "progress" ? currentProgressTab : currentCompetitionTab;
-  const selectedIndex = tabs.findIndex((tab) => tab.key === selectedTab);
+  const tabs = [
+    { key: "training", label: "Edzések", icon: "dumbbell" },
+    { key: "competitions", label: "Versenyek", icon: "flag-triangle-right" },
+    { key: "progress", label: "Fejlődés", icon: "chart-no-axes-combined" }
+  ];
+  const selectedIndex = tabs.findIndex((tab) => tab.key === screen);
   nav.hidden = false;
-  nav.setAttribute("aria-label", isTraining
-    ? "Edzési eszközök"
-    : screen === "progress" ? "Fejlődési nézetek" : "Versenysportágak");
+  nav.setAttribute("aria-label", "Fő navigáció");
   nav.style.setProperty("--segments", String(tabs.length));
   nav.style.setProperty("--segment", String(Math.max(0, selectedIndex)));
   nav.innerHTML = `<div class="bottom-nav-track"><span class="segment-pill" aria-hidden="true"></span>${tabs.map((tab) => `
-    <button class="segment-button bottom-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-bottom-tab="${escapeHTML(tab.key)}" aria-label="${escapeHTML(tab.accessibleLabel || tab.label)}" aria-pressed="${tab.key === selectedTab}" title="${escapeHTML(tab.accessibleLabel || tab.label)}">
+    <button class="segment-button bottom-tab${tab.key === screen ? " active" : ""}" type="button" data-screen="${tab.key}" aria-label="${escapeHTML(tab.label)}" aria-pressed="${tab.key === screen}" title="${escapeHTML(tab.label)}">
       <i class="segment-icon" data-lucide="${tab.icon}" aria-hidden="true"></i><span>${escapeHTML(tab.label)}</span>
     </button>`).join("")}</div>`;
   renderLucide(nav);
-  const activeTab = $(".bottom-tab.active", nav);
+}
+
+function renderScreenTabs(screen) {
+  const navs = {
+    training: $("#training-tabs"),
+    competitions: $("#competition-tabs"),
+    progress: $("#progress-tabs")
+  };
+  Object.entries(navs).forEach(([name, nav]) => {
+    nav.hidden = name !== screen || (name === "competitions" && !internetAvailable);
+  });
+  if (!screen || !navs[screen] || navs[screen].hidden) return;
+
+  const tabs = getBottomTabs(screen);
+  const selectedTab = screen === "training" ? currentTrainingTab
+    : screen === "progress" ? currentProgressTab : currentCompetitionTab;
+  const nav = navs[screen];
+  nav.style.setProperty("--segments", String(tabs.length));
+  nav.style.setProperty("--segment", String(Math.max(0, tabs.findIndex((tab) => tab.key === selectedTab))));
+  nav.innerHTML = `<div class="screen-tabs-track">${tabs.map((tab) => `
+    <button class="screen-tab${tab.key === selectedTab ? " active" : ""}" type="button" data-view-tab="${escapeHTML(tab.key)}" aria-label="${escapeHTML(tab.accessibleLabel || tab.label)}" aria-pressed="${tab.key === selectedTab}" title="${escapeHTML(tab.accessibleLabel || tab.label)}">
+      <span class="screen-tab-icon"><i data-lucide="${tab.icon}" aria-hidden="true"></i></span><span>${escapeHTML(tab.label)}</span>
+    </button>`).join("")}</div>`;
+  renderLucide(nav);
+  const activeTab = $(".screen-tab.active", nav);
   if (activeTab) nav.scrollLeft = Math.max(0, activeTab.offsetLeft - (nav.clientWidth - activeTab.offsetWidth) / 2);
-  if (isTraining) {
+
+  if (screen === "training") {
     $("#timer-panel").hidden = currentTrainingTab !== "timer";
     $("#workouts-panel").hidden = currentTrainingTab !== "workouts";
   } else if (screen === "progress") {
@@ -307,37 +307,26 @@ function renderBottomTabs(screen) {
   }
 }
 
-$("#bottom-nav").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-bottom-tab]");
+$("#main-content").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-view-tab]");
   if (!button) return;
-  const { bottomTab } = button.dataset;
+  const { viewTab } = button.dataset;
   const currentScreen = lastMainScreen;
-  const tabs = getBottomTabs(currentScreen);
-  const selectedIndex = tabs?.findIndex((tab) => tab.key === bottomTab) ?? -1;
-  if (selectedIndex < 0) return;
-  $("#bottom-nav").style.setProperty("--segment", String(selectedIndex));
-  $$(".bottom-tab", $("#bottom-nav")).forEach((tab) => {
-    const active = tab === button;
-    tab.classList.toggle("active", active);
-    tab.setAttribute("aria-pressed", String(active));
-  });
-  if (currentScreen === "training") {
-    currentTrainingTab = bottomTab;
-    $("#timer-panel").hidden = bottomTab !== "timer";
-    $("#workouts-panel").hidden = bottomTab !== "workouts";
-  } else if (currentScreen === "progress") {
-    currentProgressTab = bottomTab;
-    PROGRESS_TABS.forEach((tab) => { $(`#progress-${tab}`).hidden = tab !== bottomTab; });
-    if (bottomTab === "chart") renderProgress();
-  } else if (currentScreen === "competitions") {
-    if (bottomTab === "add-sport") {
+  const validTab = getBottomTabs(currentScreen).some((tab) => tab.key === viewTab);
+  if (!validTab) return;
+
+  if (currentScreen === "training") currentTrainingTab = viewTab;
+  else if (currentScreen === "progress") currentProgressTab = viewTab;
+  else if (currentScreen === "competitions") {
+    if (viewTab === "add-sport") {
       openSportPicker();
       return;
     }
-    currentCompetitionTab = bottomTab;
-    renderBottomTabs("competitions");
-    renderCompetitionState();
+    currentCompetitionTab = viewTab;
   }
+  renderScreenTabs(currentScreen);
+  if (currentScreen === "progress" && viewTab === "chart") renderProgress();
+  if (currentScreen === "competitions") renderCompetitionState();
 });
 
 function renderSports() {
@@ -362,7 +351,7 @@ function renderSports() {
   renderLucide($("#sport-chips"));
   renderLucide($("#sport-picker-list"));
   renderCompetitionState();
-  if (lastMainScreen === "competitions") renderBottomTabs("competitions");
+  if (lastMainScreen === "competitions") renderScreenTabs("competitions");
 }
 
 function openSportPicker() {
@@ -441,7 +430,7 @@ function applyConnectionState(online) {
     $("#competition-description").textContent = "Csatlakozz az internethez a versenyek megtekintéséhez.";
   }
   if (!online) closeSportPicker();
-  if (lastMainScreen === "competitions") renderBottomTabs("competitions");
+  if (lastMainScreen === "competitions") renderScreenTabs("competitions");
   renderCompetitionState();
 }
 
