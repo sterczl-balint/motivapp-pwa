@@ -202,7 +202,7 @@ const competitionCache = new Map();
 const competitionLoads = new Map();
 
 function showScreen(screenName) {
-  const validScreens = ["training", "competitions", "progress", "profile"];
+  const validScreens = ["home", "training", "competitions", "progress", "profile"];
   if (!validScreens.includes(screenName)) return;
   $$(".screen").forEach((screen) => { screen.hidden = screen.id !== `screen-${screenName}`; });
   if (screenName !== "profile") lastMainScreen = screenName;
@@ -257,6 +257,7 @@ function getBottomTabs(screen) {
 function renderBottomTabs(screen) {
   const nav = $("#bottom-nav");
   const tabs = [
+    { key: "home", label: "Home", icon: "house" },
     { key: "training", label: "Edzések", icon: "dumbbell" },
     { key: "competitions", label: "Versenyek", icon: "flag-triangle-right" },
     { key: "progress", label: "Fejlődés", icon: "chart-no-axes-combined" }
