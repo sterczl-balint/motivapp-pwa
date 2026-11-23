@@ -24,12 +24,20 @@
 
 * { box-sizing: border-box; }
 
+html {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 body {
   min-width: 320px;
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
+  height: 100dvh;
   margin: 0;
   overflow: hidden;
   overscroll-behavior-y: none;
@@ -52,6 +60,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: flex;
   width: min(100%, 560px);
   height: 100%;
+  height: 100dvh;
   min-height: 0;
   margin: 0 auto;
   flex-direction: column;
@@ -66,10 +75,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   position: sticky;
   top: 0;
   display: flex;
-  min-height: calc(66px + env(safe-area-inset-top));
+  min-height: calc(58px + env(safe-area-inset-top));
   align-items: center;
   justify-content: space-between;
-  padding: calc(8px + env(safe-area-inset-top)) 23px 8px;
+  padding: calc(4px + env(safe-area-inset-top)) 23px 4px;
   background: rgba(17, 21, 27, .84);
   border-bottom: 1px solid rgba(255,255,255,.035);
   backdrop-filter: blur(20px);
@@ -168,11 +177,22 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   font-size: 9px;
 }
 .profile-avatar svg { width: 18px; height: 18px; }
+.profile-button .settings-avatar {
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.profile-button .settings-avatar svg {
+  width: 21px;
+  height: 21px;
+}
 
 .main-content {
   width: 100%;
   min-height: 0;
-  padding: 10px 23px calc(92px + env(safe-area-inset-bottom));
+  padding: 4px 23px calc(74px + env(safe-area-inset-bottom));
   flex: 1 1 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -182,7 +202,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .main-content::-webkit-scrollbar { display: none; }
 
 .screen[hidden], .training-panel[hidden], .progress-panel[hidden], .form-card[hidden] { display: none; }
-.page-heading { margin: 0 0 8px; }
+.page-heading { margin: 0 0 2px; }
 .screen:not(#screen-profile) .page-heading h1,
 .screen:not(#screen-profile) .page-heading .page-subtitle { display: none; }
 .screen-tabs {
@@ -199,18 +219,19 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   display: grid;
   width: max(100%, calc(var(--segments, 2) * 78px));
   min-width: 100%;
+  min-height: 48px;
   grid-template-columns: repeat(var(--segments, 2), minmax(0, 1fr));
   gap: 4px;
 }
 .screen-tab {
   display: flex;
   min-width: 0;
-  min-height: 58px;
-  padding: 2px;
+  min-height: 48px;
+  padding: 1px;
   align-items: center;
   justify-content: flex-start;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   color: var(--muted);
   background: none;
   border: 0;
@@ -221,18 +242,18 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .screen-tab:hover { transform: translateY(-1px); }
 .screen-tab-icon {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   flex: 0 0 auto;
   place-items: center;
   color: inherit;
   background: linear-gradient(145deg, #202a39, #171d27);
   border: 1px solid var(--border);
-  border-radius: 17px;
+  border-radius: 14px;
   box-shadow: 3px 3px 7px #0d1014, -3px -3px 7px #202732;
   transition: color .18s, border-color .18s, box-shadow .18s;
 }
-.screen-tab-icon svg { width: 22px; height: 22px; stroke-width: 2; }
+.screen-tab-icon svg { width: 19px; height: 19px; stroke-width: 2; }
 .screen-tab > span:last-child { overflow: hidden; max-width: 100%; font-size: 11px; font-weight: 620; line-height: 1.15; text-overflow: ellipsis; white-space: nowrap; }
 .screen-tab > span:last-child:empty { display: none; }
 .screen-tab.active { color: var(--mint); }
@@ -715,19 +736,22 @@ body.sheet-open { overflow: hidden; }
   z-index: 4;
   position: absolute;
   bottom: 0;
-  left: 50%;
+  left: 0;
   display: block;
-  width: min(calc(100% - 24px), 480px);
-  min-height: 78px;
+  width: 100%;
+  min-height: calc(70px + env(safe-area-inset-bottom));
   overflow-x: auto;
-  padding: 5px 5px calc(5px + env(safe-area-inset-bottom, 0px));
+  padding: 4px 12px env(safe-area-inset-bottom, 0px);
   background: linear-gradient(140deg, rgba(38, 48, 64, .97), rgba(25, 31, 42, .97) 72%, rgba(25, 40, 42, .97));
   border: 1px solid rgba(211,231,247,.07);
-  border-radius: 24px;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-radius: 20px 20px 0 0;
   box-shadow: 0 12px 30px rgba(0,0,0,.48), inset 0 1px rgba(255,255,255,.035);
   backdrop-filter: blur(22px);
   -webkit-backdrop-filter: blur(22px);
-  transform: translateX(-50%);
+  transform: none;
   scrollbar-width: none;
 }
 .bottom-nav::-webkit-scrollbar { display: none; }
@@ -902,10 +926,10 @@ body.keyboard-open .bottom-nav { display: none; }
 }
 
 @media (max-height: 700px) {
-  .page-heading { margin-top: 2px; margin-bottom: 14px; }
-  .main-content { padding-top: 16px; }
-  .timer-card { margin-top: 12px; padding-top: 10px; padding-bottom: 10px; }
-  .timer-dial { --dial-size: min(64vw, 36svh, 236px, calc(100vw - 96px)); margin-top: 18px; margin-bottom: 8px; }
+  .page-heading { margin-top: 0; margin-bottom: 2px; }
+  .main-content { padding-top: 4px; }
+  .timer-card { margin-top: 4px; padding-top: 8px; padding-bottom: 8px; }
+  .timer-dial { --dial-size: min(64vw, 36svh, 236px, calc(100vw - 96px)); margin-top: 8px; margin-bottom: 6px; }
   .timer-actions { margin-top: 4px; }
   .timer-hint { margin-top: 8px; }
 }
