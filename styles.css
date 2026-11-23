@@ -853,6 +853,41 @@ body.keyboard-open .bottom-nav { display: none; }
 
 /* Reduce visual noise while keeping labels available to assistive technology. */
 .eyebrow:not(#today-label) { display: none; }
+.screen#screen-training .page-heading {
+  margin: 0 0 4px;
+}
+.screen#screen-training #today-label,
+.screen#screen-training #training-title {
+  display: block;
+}
+.screen#screen-training #today-label {
+  margin: 0 0 5px;
+  color: var(--mint);
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 1.2px;
+}
+.screen#screen-training #training-title {
+  font-size: clamp(32px, 8vw, 39px);
+  line-height: 1.05;
+}
+.screen#screen-training .page-subtitle {
+  display: none;
+}
+.screen#screen-training .screen-tabs {
+  margin-top: 7px;
+}
+.screen#screen-training .screen-tabs-track {
+  min-height: 54px;
+}
+.screen#screen-training .screen-tab {
+  min-height: 54px;
+}
+.screen#screen-training .screen-tab-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 15px;
+}
 .neumorph-card, .form-card, .about-card, .workout-card, .activity-card, .medal-card {
   background: linear-gradient(135deg, #202c3b 0%, #1a202b 68%, #1b2629 100%);
   border-color: var(--border);
