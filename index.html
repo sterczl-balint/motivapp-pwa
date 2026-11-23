@@ -11,16 +11,22 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png?v=7" type="image/png" />
     <link rel="apple-touch-icon" href="./icons/icon-180.png?v=7" />
-    <link rel="stylesheet" href="./styles.css?v=30" />
+    <link rel="stylesheet" href="./styles.css?v=39" />
     <script src="./vendor/lucide.min.js?v=1" defer></script>
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
   <body>
     <div class="app">
       <header class="topbar">
-        <button id="profile-button" class="icon-button profile-button" type="button" aria-label="Profil beállítások" data-screen="profile">
-          <span class="profile-avatar settings-avatar" aria-hidden="true"><i data-lucide="settings"></i></span>
-        </button>
+        <div class="profile-menu-wrap">
+          <button id="profile-button" class="icon-button profile-button" type="button" aria-label="Profil és beállítások" aria-expanded="false" aria-controls="profile-menu">
+            <span class="profile-avatar settings-avatar" aria-hidden="true"><i data-lucide="settings"></i></span>
+          </button>
+          <div id="profile-menu" class="profile-menu" hidden>
+            <button type="button" data-profile-section="profile"><i data-lucide="user-round"></i><span>Profil adatok</span></button>
+            <button type="button" data-profile-section="preferences"><i data-lucide="sliders-horizontal"></i><span>Egyéb beállítások</span></button>
+          </div>
+        </div>
         <div class="brand" aria-label="Motivapp">
           <span class="brand-glyph" aria-hidden="true">m<span>.</span></span>
           <span>moti<span>v</span>app</span>
@@ -35,9 +41,47 @@
       </header>
 
       <main id="main-content" class="main-content">
-        <section id="screen-home" class="screen" aria-label="Kezdőlap" hidden></section>
-        <section id="screen-training" class="screen" aria-labelledby="training-title">
+        <section id="screen-home" class="screen" aria-label="Kezdőlap" hidden>
+          <div class="home-heading">
+            <p class="eyebrow" id="home-today-label"></p>
+            <h1>Kezdőlap<span class="heading-dot">.</span></h1>
+          </div>
+          <section class="home-chart" aria-label="Heti edzésgrafikon">
+            <div class="home-chart-heading">
+              <div>
+                <p>Ezen a héten</p>
+                <div class="home-chart-total"><strong id="home-chart-total">0</strong><span>perc</span></div>
+              </div>
+              <span id="home-chart-change" class="home-chart-change" aria-live="polite">—</span>
+            </div>
+            <div id="home-chart-container" class="home-chart-plot"></div>
+          </section>
+          <div class="home-shortcuts" aria-label="Alfülek gyors elérése">
+            <button class="home-app-button" type="button" data-screen="training" data-view-target="timer" aria-label="Stopper">
+              <i class="home-app-icon" data-lucide="timer" aria-hidden="true"></i>
+              <span class="home-app-label">Stopper</span>
+            </button>
+            <button class="home-app-button" type="button" data-screen="training" data-view-target="workouts" aria-label="Edzéseim">
+              <i class="home-app-icon" data-lucide="dumbbell" aria-hidden="true"></i>
+              <span class="home-app-label">Edzéseim</span>
+            </button>
+            <button class="home-app-button" type="button" data-screen="progress" data-view-target="chart" aria-label="Grafikon">
+              <i class="home-app-icon" data-lucide="chart-no-axes-combined" aria-hidden="true"></i>
+              <span class="home-app-label">Grafikon</span>
+            </button>
+            <button class="home-app-button" type="button" data-screen="progress" data-view-target="results" aria-label="Eredmények">
+              <i class="home-app-icon" data-lucide="trophy" aria-hidden="true"></i>
+              <span class="home-app-label">Eredmények</span>
+            </button>
+            <button class="home-app-button" type="button" data-screen="progress" data-view-target="medals" aria-label="Érmek">
+              <i class="home-app-icon" data-lucide="medal" aria-hidden="true"></i>
+              <span class="home-app-label">Érmek</span>
+            </button>
+          </div>
+        </section>
+        <section id="screen-training" class="screen" aria-labelledby="training-title" hidden>
           <div class="page-heading">
+            <button class="subpage-back" type="button" data-screen="home" aria-label="Vissza a főoldalra" title="Vissza a főoldalra"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
             <p class="eyebrow" id="today-label"></p>
             <h1 id="training-title">Edzés<span class="heading-dot">.</span></h1>
             <p class="page-subtitle">Kezdd a saját tempódban.</p>
@@ -94,6 +138,7 @@
 
         <section id="screen-competitions" class="screen" aria-labelledby="competitions-title" hidden>
           <div class="page-heading">
+            <button class="subpage-back" type="button" data-screen="home" aria-label="Vissza a főoldalra" title="Vissza a főoldalra"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
             <h1 id="competitions-title">Versenyek<span class="heading-dot">.</span></h1>
             <nav class="screen-tabs" id="competition-tabs" aria-label="Versenysportágak"></nav>
           </div>
@@ -111,6 +156,7 @@
 
         <section id="screen-progress" class="screen" aria-labelledby="progress-title" hidden>
           <div class="page-heading">
+            <button class="subpage-back" type="button" data-screen="home" aria-label="Vissza a főoldalra" title="Vissza a főoldalra"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
             <p class="eyebrow">MINDEN LÉPÉS SZÁMÍT</p>
             <h1 id="progress-title">Fejlődés<span class="heading-dot">.</span></h1>
             <p class="page-subtitle">Nézd meg, mennyi mindent tettél már magadért.</p>
@@ -160,23 +206,30 @@
         </section>
 
         <section id="screen-profile" class="screen" aria-labelledby="profile-title" hidden>
-          <div class="page-heading"><p class="eyebrow">EZ A TE UTAD</p><h1>Profil<span class="heading-dot">.</span></h1><p class="page-subtitle">Tedd otthonosabbá a saját Motivappedet.</p></div>
+          <div class="page-heading">
+            <button class="subpage-back" type="button" data-screen="home" aria-label="Vissza a főoldalra" title="Vissza a főoldalra"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
+            <p class="eyebrow">EZ A TE UTAD</p><h1>Profil<span class="heading-dot">.</span></h1><p class="page-subtitle">Tedd otthonosabbá a saját Motivappedet.</p>
+          </div>
           <form id="profile-form" class="form-card neumorph-card profile-form">
             <div class="profile-avatar large-avatar" aria-hidden="true"><i data-lucide="user-round"></i></div>
             <h2 id="profile-title">Beállítások</h2>
-            <label class="field-label" for="profile-email">E-mail cím</label><input id="profile-email" class="text-field" type="email" maxlength="120" autocomplete="email" placeholder="nev@pelda.hu" />
-            <label class="field-label" for="profile-name">Név</label><input id="profile-name" class="text-field" maxlength="40" autocomplete="name" placeholder="A neved" />
-            <label class="field-label" for="profile-club">Egyesület</label><input id="profile-club" class="text-field" maxlength="80" autocomplete="organization" placeholder="Egyesület neve" />
-            <label class="field-label" for="profile-gender">Nem</label>
-            <select id="profile-gender" class="text-field"><option value="">Nincs megadva</option><option value="male">Férfi</option><option value="female">Női</option></select>
-            <label class="field-label" for="profile-notifications">Értesítések</label>
-            <select id="profile-notifications" class="text-field"><option value="all">Minden értesítés</option><option value="competitions">Csak versenyek előtt</option><option value="in-app">Csak az appban</option></select>
-            <label class="field-label" for="profile-language">Nyelv</label>
-            <select id="profile-language" class="text-field"><option value="hu">Magyar</option><option value="de">Német</option><option value="en">Angol</option><option value="es">Spanyol</option><option value="zh">Kínai</option></select>
+            <div id="profile-data-section">
+              <label class="field-label" for="profile-email">E-mail cím</label><input id="profile-email" class="text-field" type="email" maxlength="120" autocomplete="email" placeholder="nev@pelda.hu" />
+              <label class="field-label" for="profile-name">Név</label><input id="profile-name" class="text-field" maxlength="40" autocomplete="name" placeholder="A neved" />
+              <label class="field-label" for="profile-club">Egyesület</label><input id="profile-club" class="text-field" maxlength="80" autocomplete="organization" placeholder="Egyesület neve" />
+              <label class="field-label" for="profile-gender">Nem</label>
+              <select id="profile-gender" class="text-field"><option value="">Nincs megadva</option><option value="male">Férfi</option><option value="female">Női</option></select>
+            </div>
+            <div id="profile-preferences-section" hidden>
+              <label class="field-label" for="profile-notifications">Értesítések</label>
+              <select id="profile-notifications" class="text-field"><option value="all">Minden értesítés</option><option value="competitions">Csak versenyek előtt</option><option value="in-app">Csak az appban</option></select>
+              <label class="field-label" for="profile-language">Nyelv</label>
+              <select id="profile-language" class="text-field"><option value="hu">Magyar</option><option value="de">Német</option><option value="en">Angol</option><option value="es">Spanyol</option><option value="zh">Kínai</option></select>
+            </div>
             <p class="privacy-note"><span class="privacy-dot"></span> A profilod és minden edzésadatod csak ezen a készüléken tárolódik.</p>
             <button class="primary-action save-workout-button" type="submit">Beállítások mentése</button>
           </form>
-          <div class="about-card neumorph-card"><span class="brand-glyph" aria-hidden="true">m<span>.</span></span><div><h3>Motivapp</h3><p>Verzió 1.0 · Offline edzésnapló</p></div></div>
+          <div class="about-card neumorph-card"><span class="brand-glyph" aria-hidden="true">m<span>.</span></span><div><h3>Motivapp</h3><p id="app-version">Verzió 1.1 · Offline edzésnapló</p></div></div>
         </section>
       </main>
 
@@ -193,6 +246,6 @@
       </section>
     </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=28" defer></script>
+    <script src="./app.js?v=36" defer></script>
   </body>
 </html>

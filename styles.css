@@ -104,6 +104,36 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .icon-button svg, .install-button svg { width: 19px; height: 19px; }
 .profile-button { border-radius: 50%; }
 .profile-button .profile-avatar { width: 30px; height: 30px; }
+.profile-menu-wrap { position: relative; }
+.profile-menu {
+  z-index: 20;
+  position: absolute;
+  top: 48px;
+  left: 0;
+  width: 210px;
+  padding: 7px;
+  background: #1b2430;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 10px 10px 24px #090b0e, -5px -5px 14px #242d38;
+}
+.profile-menu[hidden] { display: none; }
+.profile-menu button {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+.profile-menu button:hover { color: var(--mint); background: rgba(101,246,202,.07); }
+.profile-menu svg { width: 18px; height: 18px; }
 
 .brand {
   display: inline-flex;
@@ -203,6 +233,96 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 
 .screen[hidden], .training-panel[hidden], .progress-panel[hidden], .form-card[hidden] { display: none; }
 .page-heading { margin: 0 0 2px; }
+.home-heading { margin: 2px 0 12px; }
+.home-heading .eyebrow { margin-bottom: 5px; }
+.home-heading #home-today-label { display: block; }
+.home-heading h1 { font-size: clamp(30px, 8vw, 38px); }
+.home-chart {
+  min-height: 0;
+  padding: 15px 14px 8px;
+  background: linear-gradient(135deg, #202c3b 0%, #1a202b 68%, #1b2629 100%);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  box-shadow: var(--shadow-raised);
+}
+.home-chart-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 3px 4px; }
+.home-chart-heading > div > p { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
+.home-chart-total { display: flex; align-items: baseline; gap: 6px; }
+.home-chart-total strong { font-size: 38px; line-height: 1; letter-spacing: -1.5px; }
+.home-chart-total span { color: var(--muted); font-size: 14px; font-weight: 650; }
+.home-chart-change {
+  display: grid;
+  min-width: 64px;
+  min-height: 38px;
+  padding: 0 8px;
+  place-items: center;
+  color: var(--muted);
+  background: #1b2029;
+  border: 1px solid rgba(160,183,203,.13);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 750;
+}
+.home-chart-change.is-better { color: #78edb4; border-color: rgba(120,237,180,.55); }
+.home-chart-change.is-worse { color: #ff858d; border-color: rgba(255,107,115,.45); }
+.home-chart-change.is-steady { color: var(--muted); }
+.home-chart-plot { width: 100%; }
+.home-line-chart { height: 150px; }
+.home-shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.home-app-button {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  aspect-ratio: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 3px;
+  color: var(--text);
+  background: linear-gradient(145deg, #202a39, #171d27);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-raised);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .18s, transform .18s;
+}
+.home-app-button:active { transform: scale(.985); }
+.home-app-icon {
+  width: 24px;
+  height: 24px;
+  color: var(--mint);
+}
+.home-app-label {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.subpage-back {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: var(--mint);
+  background: linear-gradient(145deg, #202a39, #171d27);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-raised);
+  cursor: pointer;
+}
+.subpage-back svg { width: 21px; height: 21px; }
+.subpage-back:active { transform: scale(.96); }
+.screen .page-heading { position: relative; }
+.screen-tabs { display: none !important; }
 .screen:not(#screen-profile) .page-heading h1,
 .screen:not(#screen-profile) .page-heading .page-subtitle { display: none; }
 .screen-tabs {
@@ -411,7 +531,7 @@ h1 {
   text-shadow: 0 0 22px rgba(101,246,202,.13);
 }
 .timer-caption { max-width: 185px; margin: 8px auto 0; color: var(--faint); font-size: 9px; letter-spacing: .5px; line-height: 1.5; }
-.timer-settings { display: flex; justify-content: center; gap: 8px; margin: 8px 0 3px; }
+.timer-settings { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 8px 0 3px; }
 .timer-settings[hidden] { display: none; }
 .timer-setting { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }
 .timer-setting input {
@@ -423,6 +543,27 @@ h1 {
   border-radius: 11px;
   box-shadow: var(--shadow-inset);
   font-size: 16px;
+}
+.interval-total {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 43px;
+  align-content: center;
+  gap: 5px;
+  padding: 9px 10px;
+  color: var(--muted);
+  background: #12171d;
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 11px;
+  box-shadow: var(--shadow-inset);
+  font-size: 11px;
+  text-align: center;
+}
+.interval-total strong {
+  color: var(--mint);
+  font-size: 16px;
+  line-height: 1;
 }
 .timer-actions { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 7px; }
 .primary-action {
@@ -876,7 +1017,7 @@ body.keyboard-open .bottom-nav { display: none; }
 }
 
 /* Reduce visual noise while keeping labels available to assistive technology. */
-.eyebrow:not(#today-label) { display: none; }
+.eyebrow:not(#today-label):not(#home-today-label) { display: none; }
 .screen#screen-training .page-heading {
   margin: 0 0 4px;
 }
@@ -932,6 +1073,42 @@ body.keyboard-open .bottom-nav { display: none; }
   .timer-dial { --dial-size: min(64vw, 36svh, 236px, calc(100vw - 96px)); margin-top: 8px; margin-bottom: 6px; }
   .timer-actions { margin-top: 4px; }
   .timer-hint { margin-top: 8px; }
+}
+
+@media (orientation: landscape) and (min-aspect-ratio: 4 / 3) and (max-height: 900px) {
+  .screen#screen-training .page-heading { margin-bottom: 2px; }
+  .screen#screen-training #today-label { display: none; }
+  .screen#screen-training #training-title { font-size: 28px; }
+  .screen#screen-training .screen-tabs { display: none; }
+  .main-content { padding-top: 2px; }
+  .timer-card {
+    display: grid;
+    grid-template-columns: minmax(190px, .9fr) minmax(220px, 1.1fr);
+    grid-template-areas:
+      "dial modes"
+      "dial settings"
+      "dial actions"
+      "laps laps"
+      "hint hint";
+    column-gap: 18px;
+    align-content: center;
+    align-items: center;
+    padding: 10px 16px 8px;
+  }
+  .timer-dial {
+    grid-area: dial;
+    --dial-size: min(43svh, 238px, 34vw);
+    margin: 0 auto;
+  }
+  .dial-mode-labels { grid-area: modes; align-self: end; }
+  .timer-settings { grid-area: settings; align-self: center; margin: 5px 0 2px; }
+  .timer-actions { grid-area: actions; align-self: start; margin-top: 3px; }
+  .timer-laps { grid-area: laps; }
+  .timer-hint { grid-area: hint; margin: 5px 0 0; }
+  .timer-setting input { width: 76px; }
+  .interval-total { max-width: 252px; margin-inline: auto; }
+  .timer-laps { width: 100%; max-height: 70px; }
+  .last-session { margin-top: 6px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

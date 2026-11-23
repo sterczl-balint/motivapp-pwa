@@ -1,5 +1,6 @@
 "use strict";
 
+const APP_VERSION = "1.1";
 const STORAGE_KEY = "motivapp.data.v1";
 const TIMER_MODES = ["stopwatch", "interval", "countdown"];
 const MODE_LABELS = {
@@ -161,10 +162,14 @@ function todayISO() {
 }
 
 function initialize() {
+  const appVersion = $("#app-version");
+  if (appVersion) appVersion.textContent = `Verzió ${APP_VERSION} · Offline edzésnapló`;
   const now = new Date();
-  $("#today-label").textContent = new Intl.DateTimeFormat("hu-HU", {
+  const todayText = new Intl.DateTimeFormat("hu-HU", {
     weekday: "long", year: "numeric", month: "long", day: "numeric"
   }).format(now);
+  $("#today-label").textContent = todayText;
+  $("#home-today-label").textContent = todayText;
   $("#result-date").value = todayISO();
   $("#medal-date").value = todayISO();
   $("#profile-name").value = data.profile.name;
@@ -175,8 +180,7 @@ function initialize() {
   $("#profile-language").value = data.profile.language;
   updateConnection();
   renderAll();
-  renderBottomTabs("training");
-  renderScreenTabs("training");
+  showScreen("home");
   renderSports();
   renderProfile();
   addRound();
@@ -205,24 +209,38 @@ function showScreen(screenName) {
   const validScreens = ["home", "training", "competitions", "progress", "profile"];
   if (!validScreens.includes(screenName)) return;
   $$(".screen").forEach((screen) => { screen.hidden = screen.id !== `screen-${screenName}`; });
-  if (screenName !== "profile") lastMainScreen = screenName;
+  if (screenName === "home" || screenName === "competitions") lastMainScreen = screenName;
   renderBottomTabs(lastMainScreen);
+  $("#bottom-nav").hidden = screenName === "profile";
   renderScreenTabs(screenName === "profile" ? null : screenName);
   if (screenName === "progress") renderProgress();
   if (screenName === "competitions") renderCompetitionState();
 }
 
 document.addEventListener("click", (event) => {
+  const profileMenu = $("#profile-menu");
+  const profileButton = $("#profile-button");
+  if (profileMenu && profileButton && !profileMenu.contains(event.target) && !profileButton.contains(event.target)) {
+    profileMenu.hidden = true;
+    profileButton.setAttribute("aria-expanded", "false");
+  }
   const navTarget = event.target.closest("[data-screen]");
   if (navTarget) {
     event.preventDefault();
     showScreen(navTarget.dataset.screen);
+    if (navTarget.dataset.viewTarget) {
+      if (navTarget.dataset.screen === "training") currentTrainingTab = navTarget.dataset.viewTarget;
+      if (navTarget.dataset.screen === "progress") currentProgressTab = navTarget.dataset.viewTarget;
+      renderScreenTabs(navTarget.dataset.screen);
+    }
   }
 });
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") {
     closeSportPicker();
+    $("#profile-menu").hidden = true;
+    $("#profile-button").setAttribute("aria-expanded", "false");
   }
 });
 
@@ -258,9 +276,7 @@ function renderBottomTabs(screen) {
   const nav = $("#bottom-nav");
   const tabs = [
     { key: "home", label: "Home", icon: "house" },
-    { key: "training", label: "Edzések", icon: "dumbbell" },
-    { key: "competitions", label: "Versenyek", icon: "flag-triangle-right" },
-    { key: "progress", label: "Fejlődés", icon: "chart-no-axes-combined" }
+    { key: "competitions", label: "Versenyek", icon: "flag-triangle-right" }
   ];
   const selectedIndex = tabs.findIndex((tab) => tab.key === screen);
   nav.hidden = false;
@@ -783,6 +799,9 @@ let intervalRounds = 4;
 let intervalRound = 1;
 let timerLaps = [];
 let timerAudioContext = null;
+let timerCountdownBuffer = null;
+let timerFinishBuffer = null;
+let timerReferenceBuffer = null;
 
 function getPhaseDuration() {
   if (timerMode === "interval") return isWorkPhase ? workSeconds : restSeconds;
@@ -800,7 +819,8 @@ function renderTimerSettings() {
   settings.innerHTML = timerMode === "interval"
     ? `<label class="timer-setting">Munka (másodperc)<input id="work-seconds" type="number" min="5" max="5999" step="5" value="${workSeconds}"${timerRunning ? " disabled" : ""}></label>
        <label class="timer-setting">Pihenő (másodperc)<input id="rest-seconds" type="number" min="5" max="5999" step="5" value="${restSeconds}"${timerRunning ? " disabled" : ""}></label>
-       <label class="timer-setting">Körök<input id="interval-rounds" type="number" min="1" max="99" step="1" value="${intervalRounds}"${timerRunning ? " disabled" : ""}></label>`
+       <label class="timer-setting">Körök<input id="interval-rounds" type="number" min="1" max="99" step="1" value="${intervalRounds}"${timerRunning ? " disabled" : ""}></label>
+       <div class="interval-total"><span>Összes idő</span><strong id="interval-total">${formatDuration(getIntervalRemainingSeconds())}</strong></div>`
     : `<label class="timer-setting">Visszaszámlálás (másodperc)<input id="countdown-seconds" type="number" min="5" max="59999" step="5" value="${countdownSeconds}"${timerRunning ? " disabled" : ""}></label>`;
   $("#work-seconds")?.addEventListener("change", (event) => {
     workSeconds = clampInteger(event.target.value, 5, 5999, 45);
@@ -841,6 +861,14 @@ function renderTimerSettings() {
 function clampInteger(value, minimum, maximum, fallback) {
   const number = Number.parseInt(value, 10);
   return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
+}
+
+function getIntervalTotalSeconds() {
+  return (workSeconds * intervalRounds) + (restSeconds * Math.max(0, intervalRounds - 1));
+}
+
+function getIntervalRemainingSeconds() {
+  return Math.max(0, getIntervalTotalSeconds() - timerElapsed);
 }
 
 function renderTimer() {
@@ -906,19 +934,21 @@ function advanceTimer(delta) {
         if (isWorkPhase) workElapsed += phaseRemaining;
         remaining -= phaseRemaining;
         if (isWorkPhase) {
+          if (intervalRound >= intervalRounds) {
+            timerElapsed = getIntervalTotalSeconds();
+            phaseRemaining = 0;
+            intervalRound = intervalRounds;
+            timerRunning = false;
+            clearInterval(timerInterval);
+            timerInterval = null;
+            recordSession(workElapsed, MODE_LABELS.interval);
+            loggedTimerElapsed = timerElapsed;
+            playIntervalBeep("finish");
+            showToast("Minden kör kész — szép munka!");
+            remaining = 0;
+            break;
+          }
           isWorkPhase = false;
-        } else if (intervalRound >= intervalRounds) {
-          timerElapsed -= remaining;
-          phaseRemaining = 0;
-          intervalRound = intervalRounds + 1;
-          timerRunning = false;
-          clearInterval(timerInterval);
-          timerInterval = null;
-          recordSession(workElapsed, MODE_LABELS.interval);
-          loggedTimerElapsed = timerElapsed;
-          showToast("Minden kör kész — szép munka!");
-          remaining = 0;
-          break;
         } else {
           intervalRound += 1;
           isWorkPhase = true;
@@ -939,6 +969,7 @@ function advanceTimer(delta) {
     timerInterval = null;
     recordSession(completed, "Visszaszámláló");
     loggedTimerElapsed = countdownSeconds;
+    playIntervalBeep("finish");
     showToast("Lejárt az időzítő. Szép munka!");
   }
   renderTimer();
@@ -960,6 +991,7 @@ function startTimer() {
   }
   if (timerMode === "interval" && phaseRemaining <= 0) phaseRemaining = getPhaseDuration();
   timerRunning = true;
+  if (timerMode === "interval") playIntervalBeep("work");
   let lastTick = performance.now();
   renderTimer();
   timerInterval = window.setInterval(() => {
@@ -972,7 +1004,7 @@ function startTimer() {
       advanceTimer(delta);
       if (timerMode === "interval" && timerRunning) {
         if (isWorkPhase !== previousWorkPhase) {
-          playIntervalBeep(true);
+          playIntervalBeep(isWorkPhase ? "work" : "rest");
         } else {
           const previousSecond = Math.ceil(previousPhaseRemaining);
           const currentSecond = Math.ceil(phaseRemaining);
@@ -993,32 +1025,88 @@ function resumeTimerAudio() {
     if (timerAudioContext.state === "suspended") {
       timerAudioContext.resume().catch((error) => console.error("Az időzítő hangja nem indítható el.", error));
     }
+    if (!timerReferenceBuffer) {
+      fetch("./reference-beep.wav")
+        .then((response) => {
+          if (!response.ok) throw new Error(`Reference audio not found: ${response.status}`);
+          return response.arrayBuffer();
+        })
+        .then((data) => timerAudioContext.decodeAudioData(data))
+        .then((buffer) => { timerReferenceBuffer = buffer; })
+        .catch((error) => console.error("A videóból kivágott jelzőhang betöltése nem sikerült.", error));
+    }
   } catch (error) {
     console.error("Az időzítő hangja nem indítható el.", error);
   }
 }
 
-function playIntervalBeep(isPhaseChange = false) {
+function playIntervalBeep(kind = "countdown") {
   if (!timerAudioContext || timerAudioContext.state !== "running") return;
-  const playTone = (frequency, startTime, duration) => {
-    const oscillator = timerAudioContext.createOscillator();
+  if (timerReferenceBuffer) {
+    const playReference = (offset = 0, peak = 1) => {
+      const source = timerAudioContext.createBufferSource();
+      const volume = timerAudioContext.createGain();
+      source.buffer = timerReferenceBuffer;
+      volume.gain.setValueAtTime(0.0001, timerAudioContext.currentTime + offset);
+      volume.gain.exponentialRampToValueAtTime(peak, timerAudioContext.currentTime + offset + 0.012);
+      volume.gain.exponentialRampToValueAtTime(peak * 0.72, timerAudioContext.currentTime + offset + 0.38);
+      volume.gain.exponentialRampToValueAtTime(0.0001, timerAudioContext.currentTime + offset + 0.475);
+      source.connect(volume);
+      volume.connect(timerAudioContext.destination);
+      source.start(timerAudioContext.currentTime + offset);
+    };
+    if (kind === "finish") {
+      playReference(0, 1);
+      playReference(0.22, 1);
+      playReference(0.44, 1);
+    } else if (kind === "work") {
+      playReference(0, 1);
+    } else if (kind === "rest") {
+      playReference(0, 0.82);
+      playReference(0.22, 0.82);
+    } else {
+      playReference(0, 0.9);
+    }
+    return;
+  }
+  const playTone = (frequency, startTime, duration, peak = 0.95) => {
+    const tone = timerAudioContext.createOscillator();
+    const overtone = timerAudioContext.createOscillator();
     const volume = timerAudioContext.createGain();
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(frequency, startTime);
+    const overtoneVolume = timerAudioContext.createGain();
+    tone.type = "triangle";
+    overtone.type = "sine";
+    tone.frequency.setValueAtTime(frequency, startTime);
+    overtone.frequency.setValueAtTime(frequency * 2, startTime);
     volume.gain.setValueAtTime(0.0001, startTime);
-    volume.gain.exponentialRampToValueAtTime(0.5, startTime + 0.015);
+    volume.gain.exponentialRampToValueAtTime(peak, startTime + 0.012);
+    volume.gain.setValueAtTime(peak, startTime + duration * 0.62);
     volume.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-    oscillator.connect(volume);
+    overtoneVolume.gain.setValueAtTime(0.0001, startTime);
+    overtoneVolume.gain.exponentialRampToValueAtTime(peak * 0.28, startTime + 0.012);
+    overtoneVolume.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+    tone.connect(volume);
+    overtone.connect(overtoneVolume);
     volume.connect(timerAudioContext.destination);
-    oscillator.start(startTime);
-    oscillator.stop(startTime + duration);
+    overtoneVolume.connect(timerAudioContext.destination);
+    tone.start(startTime);
+    overtone.start(startTime);
+    tone.stop(startTime + duration);
+    overtone.stop(startTime + duration);
   };
   const now = timerAudioContext.currentTime;
-  if (isPhaseChange) {
-    playTone(523.25, now, 0.18);
-    playTone(1046.5, now + 0.2, 0.24);
+  if (kind === "work") {
+    playTone(659.25, now, 0.22, 0.9);
+    playTone(1318.5, now + 0.18, 0.32, 0.95);
+  } else if (kind === "rest") {
+    playTone(523.25, now, 0.22, 0.9);
+    playTone(783.99, now + 0.18, 0.32, 0.95);
+  } else if (kind === "finish") {
+    playTone(784, now, 0.26, 1);
+    playTone(987.77, now + 0.24, 0.26, 1);
+    playTone(1318.5, now + 0.48, 0.58, 1);
   } else {
-    playTone(880, now, 0.16);
+    playTone(880, now, 0.22, 1);
   }
 }
 
@@ -1498,6 +1586,24 @@ function renderProgress() {
     chartChange.setAttribute("aria-label", "Nincs összehasonlítható előző heti adat");
   }
   $("#chart-total").textContent = String(Math.round(weeklySeconds / 60));
+  $("#home-chart-total").textContent = String(Math.round(weeklySeconds / 60));
+  const homeChange = $("#home-chart-change");
+  if (previousWeeklySeconds > 0) {
+    const change = Math.round(((weeklySeconds - previousWeeklySeconds) / previousWeeklySeconds) * 100);
+    homeChange.textContent = `${change > 0 ? "+" : ""}${change}%`;
+    homeChange.className = `home-chart-change${change > 0 ? " is-better" : change < 0 ? " is-worse" : " is-steady"}`;
+  } else {
+    homeChange.textContent = weeklySeconds > 0 ? "Új adat" : "—";
+    homeChange.className = "home-chart-change is-steady";
+  }
+  $("#home-chart-container").innerHTML = `<svg class="line-chart home-line-chart" viewBox="0 0 640 300" role="img" aria-label="E heti edzésidő napokra bontva, percben">
+    <defs><linearGradient id="home-chart-area-gradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ff8748" stop-opacity=".22" /><stop offset="100%" stop-color="#ff8748" stop-opacity="0" /></linearGradient></defs>
+    <g class="chart-guides" aria-hidden="true"><path d="M24 55H616M24 145H616M24 235H616" /></g>
+    <polygon class="chart-area" points="${linePoints} 608,235 32,235" style="fill:url(#home-chart-area-gradient)" />
+    <polyline class="chart-line" points="${linePoints}" />
+    ${chartPoints.map((point) => `<g class="chart-point${point.index === todayIndex ? " today" : ""}"><title>${point.date}: ${Math.round(point.minutes)} perc</title><circle cx="${point.x}" cy="${point.y}" r="9" /></g>`).join("")}
+    ${chartPoints.map((point) => `<text class="chart-day${point.index === todayIndex ? " today" : ""}" x="${point.x}" y="280" text-anchor="middle">${point.label}</text>`).join("")}
+  </svg>`;
   const nextWeekStart = new Date(weekStart);
   nextWeekStart.setDate(nextWeekStart.getDate() + 7);
   const weeklySessions = data.sessions.filter((session) => {
@@ -1622,6 +1728,28 @@ $("#profile-form").addEventListener("submit", (event) => {
   data.profile.language = $("#profile-language").value;
   saveData("Elmentettük a profilbeállításaidat.");
   renderProfile();
+});
+
+function showProfileSection(sectionName) {
+  const isPreferences = sectionName === "preferences";
+  $("#profile-data-section").hidden = isPreferences;
+  $("#profile-preferences-section").hidden = !isPreferences;
+  $("#profile-title").textContent = isPreferences ? "Egyéb beállítások" : "Profil adatok";
+  $("#profile-menu").hidden = true;
+  $("#profile-button").setAttribute("aria-expanded", "false");
+  showScreen("profile");
+}
+
+$("#profile-button").addEventListener("click", (event) => {
+  event.stopPropagation();
+  const menu = $("#profile-menu");
+  const willOpen = menu.hidden;
+  menu.hidden = !willOpen;
+  event.currentTarget.setAttribute("aria-expanded", String(willOpen));
+});
+
+$$("[data-profile-section]").forEach((button) => {
+  button.addEventListener("click", () => showProfileSection(button.dataset.profileSection));
 });
 
 function renderProfile() {
