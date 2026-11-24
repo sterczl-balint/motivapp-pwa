@@ -327,6 +327,7 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .subpage-back svg { width: 21px; height: 21px; }
 .subpage-back:active { transform: scale(.96); }
 .screen .page-heading { position: relative; }
+.screen#screen-competitions .screen-tabs:not([hidden]) { display: block !important; }
 .screen#screen-calendar .page-heading { margin: 3px 0 16px; }
 .screen-tabs { display: none !important; }
 .screen:not(#screen-profile) .page-heading h1,
