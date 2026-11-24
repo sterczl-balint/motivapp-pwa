@@ -11,7 +11,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icons/icon-192.png?v=7" type="image/png" />
     <link rel="apple-touch-icon" href="./icons/icon-180.png?v=7" />
-    <link rel="stylesheet" href="./styles.css?v=39" />
+    <link rel="stylesheet" href="./styles.css?v=47" />
     <script src="./vendor/lucide.min.js?v=1" defer></script>
     <title>Motivapp — Edzés a saját ritmusodban</title>
   </head>
@@ -27,15 +27,15 @@
             <button type="button" data-profile-section="preferences"><i data-lucide="sliders-horizontal"></i><span>Egyéb beállítások</span></button>
           </div>
         </div>
-        <div class="brand" aria-label="Motivapp">
-          <span class="brand-glyph" aria-hidden="true">m<span>.</span></span>
-          <span>moti<span>v</span>app</span>
+        <div class="connection-indicator" role="status" aria-live="polite" aria-label="Kapcsolat állapota">
+          <span class="connection-dot" aria-hidden="true"></span>
+          <span id="connection-label">Offline mód</span>
         </div>
         <div class="header-actions">
           <button id="install-button" class="install-button" type="button" aria-label="Motivapp telepítése" hidden><i data-lucide="download"></i></button>
-          <div class="connection-indicator" aria-label="Kapcsolat állapota">
-            <span class="connection-dot"></span>
-            <span id="connection-label">Offline mód</span>
+          <div class="token-balance" role="img" aria-label="Tokenegyenleg: 0 token" title="Tokenegyenleg: 0 token">
+            <i data-lucide="coins" aria-hidden="true"></i>
+            <span>0 token</span>
           </div>
         </div>
       </header>
@@ -57,6 +57,10 @@
             <div id="home-chart-container" class="home-chart-plot"></div>
           </section>
           <div class="home-shortcuts" aria-label="Alfülek gyors elérése">
+            <button class="home-app-button" type="button" data-screen="calendar" aria-label="Naptár">
+              <i class="home-app-icon" data-lucide="calendar-days" aria-hidden="true"></i>
+              <span class="home-app-label">Naptár</span>
+            </button>
             <button class="home-app-button" type="button" data-screen="training" data-view-target="timer" aria-label="Stopper">
               <i class="home-app-icon" data-lucide="timer" aria-hidden="true"></i>
               <span class="home-app-label">Stopper</span>
@@ -77,6 +81,58 @@
               <i class="home-app-icon" data-lucide="medal" aria-hidden="true"></i>
               <span class="home-app-label">Érmek</span>
             </button>
+          </div>
+        </section>
+        <section id="screen-calendar" class="screen" aria-labelledby="calendar-title" hidden>
+          <div class="page-heading calendar-heading">
+            <button class="subpage-back" type="button" data-screen="home" aria-label="Vissza a főoldalra" title="Vissza a főoldalra"><i data-lucide="arrow-left" aria-hidden="true"></i></button>
+            <h1 id="calendar-title">Naptár<span class="heading-dot">.</span></h1>
+            <p class="page-subtitle">A kiválasztott sportágak közelgő versenyei egy helyen.</p>
+          </div>
+          <section class="calendar-panel" aria-label="Versenynaptár">
+            <div class="calendar-toolbar">
+              <button id="calendar-previous-month" class="icon-button calendar-month-button" type="button" aria-label="Előző hónap"><i data-lucide="chevron-left"></i></button>
+              <h2 id="calendar-month-label" aria-live="polite"></h2>
+              <button id="calendar-next-month" class="icon-button calendar-month-button" type="button" aria-label="Következő hónap"><i data-lucide="chevron-right"></i></button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>H</span><span>K</span><span>Sze</span><span>Cs</span><span>P</span><span>Szo</span><span>V</span>
+            </div>
+            <div id="calendar-grid" class="calendar-grid" role="group" aria-label="A hónap napjai"></div>
+          </section>
+          <div class="calendar-legend" aria-label="Naptárjelölések">
+            <span><i class="calendar-legend-dot is-competition" aria-hidden="true"></i>Verseny</span>
+            <span><i class="calendar-legend-dot is-workout" aria-hidden="true"></i>Edzés</span>
+          </div>
+          <div class="calendar-agenda-heading">
+            <h2 id="calendar-selected-date"></h2>
+            <span id="calendar-day-count"></span>
+          </div>
+          <div id="calendar-day-events" class="calendar-day-events"></div>
+          <section class="calendar-planned-section" aria-labelledby="calendar-planned-title">
+            <div class="calendar-planned-heading">
+              <div><h2 id="calendar-planned-title">Heti edzésterv</h2><p>Minden héten ismétlődő edzések</p></div>
+            </div>
+            <form id="planned-workout-form" class="calendar-plan-form">
+              <label class="calendar-plan-field">Edzésterv<select id="planned-workout-template" class="text-field" required></select></label>
+              <div class="calendar-plan-row">
+                <label class="calendar-plan-field">Nap<select id="planned-workout-weekday" class="text-field" required>
+                  <option value="1">Hétfő</option><option value="2">Kedd</option><option value="3">Szerda</option><option value="4">Csütörtök</option><option value="5">Péntek</option><option value="6">Szombat</option><option value="7">Vasárnap</option>
+                </select></label>
+                <label class="calendar-plan-field">Kezdés<input id="planned-workout-time" class="text-field" type="time" value="18:00" required /></label>
+              </div>
+              <button id="planned-workout-submit" class="primary-action" type="submit">Heti edzés hozzáadása</button>
+            </form>
+            <p id="planned-workout-no-template" class="calendar-plan-empty" hidden>
+              Először hozz létre egy edzéstervet az Edzéseim között.
+              <button type="button" class="secondary-button" data-screen="training" data-view-target="workouts">Edzésterv létrehozása</button>
+            </p>
+            <div id="planned-workout-list" class="planned-workout-list"></div>
+          </section>
+          <p id="calendar-status" class="calendar-status" aria-live="polite" hidden></p>
+          <div id="calendar-empty" class="calendar-empty" hidden>
+            <p id="calendar-empty-message"></p>
+            <button type="button" class="secondary-button" data-screen="competitions" data-open-sport-picker>Sportágak kiválasztása</button>
           </div>
         </section>
         <section id="screen-training" class="screen" aria-labelledby="training-title" hidden>
@@ -152,6 +208,7 @@
           <p id="competition-status" class="competition-status" aria-live="polite" hidden></p>
           <button id="competition-retry" class="secondary-button competition-retry" type="button" hidden><i data-lucide="refresh-cw"></i> Újrapróbálás</button>
           <div id="competition-events" class="competition-events" hidden></div>
+          <p id="competition-result-status" class="competition-result-status" aria-live="polite" hidden></p>
         </section>
 
         <section id="screen-progress" class="screen" aria-labelledby="progress-title" hidden>
@@ -229,7 +286,7 @@
             <p class="privacy-note"><span class="privacy-dot"></span> A profilod és minden edzésadatod csak ezen a készüléken tárolódik.</p>
             <button class="primary-action save-workout-button" type="submit">Beállítások mentése</button>
           </form>
-          <div class="about-card neumorph-card"><span class="brand-glyph" aria-hidden="true">m<span>.</span></span><div><h3>Motivapp</h3><p id="app-version">Verzió 1.1 · Offline edzésnapló</p></div></div>
+          <div class="about-card neumorph-card"><span class="brand-glyph" aria-hidden="true">m<span>.</span></span><div><h3>Motivapp</h3>          <p id="app-version">Verzió 1.4 · Offline edzésnapló</p></div></div>
         </section>
       </main>
 
@@ -245,7 +302,19 @@
         <div id="sport-picker-list" class="sport-picker-list"></div>
       </section>
     </div>
+    <div id="session-inclusion-backdrop" class="sheet-backdrop session-inclusion-backdrop" hidden>
+      <section class="sport-picker session-inclusion-dialog" role="dialog" aria-modal="true" aria-labelledby="session-inclusion-title" aria-describedby="session-inclusion-question">
+        <div class="sheet-handle" aria-hidden="true"></div>
+        <div class="form-heading"><h3 id="session-inclusion-title">Edzés mentve</h3></div>
+        <p id="session-inclusion-summary" class="session-inclusion-summary"></p>
+        <p id="session-inclusion-question" class="session-inclusion-question">Beleszámoljuk ezt az időt a napi edzésidődbe?</p>
+        <div class="session-inclusion-actions">
+          <button id="session-include-button" class="primary-action" type="button">Igen, számolja bele</button>
+          <button id="session-exclude-button" class="secondary-button" type="button">Nem, csak mentse</button>
+        </div>
+      </section>
+    </div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <script src="./app.js?v=36" defer></script>
+    <script src="./app.js?v=47" defer></script>
   </body>
 </html>

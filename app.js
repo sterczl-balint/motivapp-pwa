@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "1.1";
+const APP_VERSION = "1.4";
 const STORAGE_KEY = "motivapp.data.v1";
 const TIMER_MODES = ["stopwatch", "interval", "countdown"];
 const MODE_LABELS = {
@@ -55,6 +55,7 @@ const COMPETITION_SOURCES = {
   }
 };
 const COMPETITION_CACHE_DURATION = 15 * 60 * 1000;
+const TEAM_SPORT_SOURCES = new Set(["football", "hockey", "water-polo"]);
 const defaults = {
   profile: {
     email: "",
@@ -65,15 +66,29 @@ const defaults = {
     language: "hu"
   },
   workouts: [],
+  plannedWorkouts: [],
   recentWorkoutNames: [],
   sports: [],
   sessions: [],
   results: [],
+  followedCompetitions: [],
+  dismissedCompetitionResults: [],
   medals: []
 };
 
 function freshData() {
-  return { profile: { ...defaults.profile }, workouts: [], recentWorkoutNames: [], sports: [], sessions: [], results: [], medals: [] };
+  return {
+    profile: { ...defaults.profile },
+    workouts: [],
+    plannedWorkouts: [],
+    recentWorkoutNames: [],
+    sports: [],
+    sessions: [],
+    results: [],
+    followedCompetitions: [],
+    dismissedCompetitionResults: [],
+    medals: []
+  };
 }
 
 function readData() {
@@ -84,12 +99,26 @@ function readData() {
     return {
       profile: { ...defaults.profile, ...(parsed.profile || {}) },
       workouts: Array.isArray(parsed.workouts) ? parsed.workouts : [],
+      plannedWorkouts: Array.isArray(parsed.plannedWorkouts)
+        ? parsed.plannedWorkouts.filter((item) => item && typeof item.id === "string"
+          && typeof item.workoutId === "string" && typeof item.workoutName === "string"
+          && Number.isInteger(item.weekday) && item.weekday >= 1 && item.weekday <= 7
+          && typeof item.time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(item.time))
+        : [],
       recentWorkoutNames: Array.isArray(parsed.recentWorkoutNames)
         ? parsed.recentWorkoutNames.filter((name) => typeof name === "string")
         : [],
       sports: Array.isArray(parsed.sports) ? parsed.sports.filter((sport) => SPORTS.includes(sport)) : [],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       results: Array.isArray(parsed.results) ? parsed.results : [],
+      followedCompetitions: Array.isArray(parsed.followedCompetitions)
+        ? parsed.followedCompetitions.filter((item) => item && typeof item === "object"
+          && typeof item.key === "string" && Object.prototype.hasOwnProperty.call(COMPETITION_SOURCES, item.sourceKey)
+          && typeof item.title === "string" && typeof item.date === "string" && typeof item.url === "string")
+        : [],
+      dismissedCompetitionResults: Array.isArray(parsed.dismissedCompetitionResults)
+        ? parsed.dismissedCompetitionResults.filter((key) => typeof key === "string").slice(-300)
+        : [],
       medals: Array.isArray(parsed.medals) ? parsed.medals : []
     };
   } catch (error) {
@@ -104,6 +133,8 @@ const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selec
 let toastTimeout;
 let internetAvailable = navigator.onLine;
 let connectionCheckId = 0;
+let pendingSessionInclusion = null;
+let sessionInclusionTrigger = null;
 
 function showToast(message) {
   const toast = $("#toast");
@@ -201,20 +232,32 @@ let lastMainScreen = "training";
 let currentTrainingTab = "timer";
 let currentProgressTab = "chart";
 let currentCompetitionTab = "add-sport";
+let calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let selectedCalendarDate = localDateKey(new Date());
+let calendarRequestId = 0;
+let calendarEvents = [];
 let competitionRequestId = 0;
 const competitionCache = new Map();
 const competitionLoads = new Map();
+const competitionNoticeCache = new Map();
+
+function syncTimerLandscapeMode() {
+  const timerScreenActive = !$("#screen-training").hidden && currentTrainingTab === "timer";
+  document.body.classList.toggle("timer-landscape-mode", timerScreenActive);
+}
 
 function showScreen(screenName) {
-  const validScreens = ["home", "training", "competitions", "progress", "profile"];
+  const validScreens = ["home", "calendar", "training", "competitions", "progress", "profile"];
   if (!validScreens.includes(screenName)) return;
   $$(".screen").forEach((screen) => { screen.hidden = screen.id !== `screen-${screenName}`; });
-  if (screenName === "home" || screenName === "competitions") lastMainScreen = screenName;
+  if (["home", "competitions"].includes(screenName)) lastMainScreen = screenName;
   renderBottomTabs(lastMainScreen);
   $("#bottom-nav").hidden = screenName === "profile";
   renderScreenTabs(screenName === "profile" ? null : screenName);
+  syncTimerLandscapeMode();
   if (screenName === "progress") renderProgress();
   if (screenName === "competitions") renderCompetitionState();
+  if (screenName === "calendar") loadCalendarEvents();
 }
 
 document.addEventListener("click", (event) => {
@@ -228,15 +271,32 @@ document.addEventListener("click", (event) => {
   if (navTarget) {
     event.preventDefault();
     showScreen(navTarget.dataset.screen);
+    if (navTarget.hasAttribute("data-open-sport-picker")) openSportPicker();
     if (navTarget.dataset.viewTarget) {
       if (navTarget.dataset.screen === "training") currentTrainingTab = navTarget.dataset.viewTarget;
       if (navTarget.dataset.screen === "progress") currentProgressTab = navTarget.dataset.viewTarget;
       renderScreenTabs(navTarget.dataset.screen);
+      syncTimerLandscapeMode();
     }
   }
 });
 
 document.addEventListener("keydown", (event) => {
+  if (pendingSessionInclusion) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      resolveSessionInclusion(false);
+    } else if (event.key === "Tab") {
+      event.preventDefault();
+      const includeButton = $("#session-include-button");
+      const excludeButton = $("#session-exclude-button");
+      const nextButton = event.shiftKey
+        ? document.activeElement === includeButton ? excludeButton : includeButton
+        : document.activeElement === excludeButton ? includeButton : excludeButton;
+      nextButton.focus();
+    }
+    return;
+  }
   if (event.key === "Escape") {
     closeSportPicker();
     $("#profile-menu").hidden = true;
@@ -341,6 +401,7 @@ $("#main-content").addEventListener("click", (event) => {
     currentCompetitionTab = viewTab;
   }
   renderScreenTabs(currentScreen);
+  syncTimerLandscapeMode();
   if (currentScreen === "progress" && viewTab === "chart") renderProgress();
   if (currentScreen === "competitions") renderCompetitionState();
 });
@@ -483,6 +544,7 @@ function renderCompetitionState() {
   if (!$("#competition-empty")) return;
   $("#competition-state").hidden = internetAvailable;
   $("#competition-events").hidden = true;
+  $("#competition-result-status").hidden = true;
   $("#competition-status").hidden = true;
   $("#competition-retry").hidden = true;
   if (!internetAvailable) {
@@ -501,6 +563,174 @@ function renderCompetitionState() {
   const activeSport = data.sports.find((sport) => `sport:${sport}` === currentCompetitionTab) || data.sports[0];
   if (currentCompetitionTab !== `sport:${activeSport}`) currentCompetitionTab = `sport:${activeSport}`;
   loadCompetitionEvents(activeSport);
+}
+
+function formatCalendarDate(date, options) {
+  return new Intl.DateTimeFormat("hu-HU", options).format(date);
+}
+
+function getCalendarEventsForDate(dateKey) {
+  return calendarEvents.filter((item) => competitionDateKey(item.event) === dateKey);
+}
+
+function getCalendarPlannedWorkoutsForDate(dateKey) {
+  const date = new Date(`${dateKey}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return [];
+  const weekday = date.getDay() || 7;
+  return data.plannedWorkouts.filter((item) => item.weekday === weekday);
+}
+
+function renderPlannedWorkoutOptions() {
+  const select = $("#planned-workout-template");
+  if (!select) return;
+  select.innerHTML = `<option value="">${data.workouts.length ? "Válassz edzéstervet" : "Nincs mentett edzésterv"}</option>${data.workouts
+    .map((workout) => `<option value="${escapeHTML(workout.id)}">${escapeHTML(workout.name)}</option>`).join("")}`;
+  select.disabled = data.workouts.length === 0;
+  $("#planned-workout-submit").disabled = data.workouts.length === 0;
+  $("#planned-workout-no-template").hidden = data.workouts.length > 0;
+}
+
+function renderPlannedWorkouts() {
+  const list = $("#planned-workout-list");
+  if (!list) return;
+  const weekdays = ["", "Hétfő", "Kedd", "Szerda", "Csütörtök", "Péntek", "Szombat", "Vasárnap"];
+  const schedules = [...data.plannedWorkouts].sort((a, b) => a.weekday - b.weekday || a.time.localeCompare(b.time));
+  list.innerHTML = schedules.map((item) => `<article class="planned-workout-row">
+    <span class="calendar-legend-dot is-workout" aria-hidden="true"></span>
+    <div><h3>${escapeHTML(item.workoutName)}</h3><p>${weekdays[item.weekday]} · ${escapeHTML(item.time)} · minden héten</p></div>
+    <button class="icon-button planned-workout-delete" type="button" data-delete-planned-workout="${escapeHTML(item.id)}" aria-label="${escapeHTML(item.workoutName)} heti tervének törlése" title="Heti terv törlése"><i data-lucide="trash-2" aria-hidden="true"></i></button>
+  </article>`).join("");
+  renderLucide(list);
+}
+
+function renderCalendar() {
+  const grid = $("#calendar-grid");
+  if (!grid) return;
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  $("#calendar-month-label").textContent = formatCalendarDate(calendarMonth, { month: "long", year: "numeric" });
+
+  const cells = Array.from({ length: offset }, () => '<span class="calendar-day-spacer" aria-hidden="true"></span>');
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(year, month, day);
+    const dateKey = localDateKey(date);
+    const events = getCalendarEventsForDate(dateKey);
+    const plannedWorkouts = getCalendarPlannedWorkoutsForDate(dateKey);
+    const today = dateKey === localDateKey(new Date());
+    const selected = dateKey === selectedCalendarDate;
+    const markers = `${events.length ? '<i class="calendar-day-dot is-competition" aria-hidden="true"></i>' : ""}${plannedWorkouts.length ? '<i class="calendar-day-dot is-workout" aria-hidden="true"></i>' : ""}`;
+    const dayLabel = [
+      events.length ? `${events.length} verseny` : "",
+      plannedWorkouts.length ? `${plannedWorkouts.length} betervezett edzés` : ""
+    ].filter(Boolean).join(", ");
+    cells.push(`<button class="calendar-day${today ? " is-today" : ""}${selected ? " is-selected" : ""}${events.length ? " has-competitions" : ""}${plannedWorkouts.length ? " has-workouts" : ""}" type="button" data-calendar-date="${dateKey}" aria-label="${escapeHTML(formatCalendarDate(date, { year: "numeric", month: "long", day: "numeric" }))}${dayLabel ? `, ${dayLabel}` : ""}" aria-pressed="${selected}">
+      <span>${day}</span>${markers ? `<span class="calendar-day-markers">${markers}</span>` : ""}
+    </button>`);
+  }
+  while (cells.length % 7) cells.push('<span class="calendar-day-spacer" aria-hidden="true"></span>');
+  grid.innerHTML = cells.join("");
+
+  const selectedDate = new Date(`${selectedCalendarDate}T12:00:00`);
+  $("#calendar-selected-date").textContent = formatCalendarDate(selectedDate, {
+    weekday: "long",
+    month: "long",
+    day: "numeric"
+  });
+  const dayEvents = getCalendarEventsForDate(selectedCalendarDate);
+  const dayPlannedWorkouts = getCalendarPlannedWorkoutsForDate(selectedCalendarDate);
+  const dayCounts = [
+    dayEvents.length ? `${dayEvents.length} verseny` : "",
+    dayPlannedWorkouts.length ? `${dayPlannedWorkouts.length} edzés` : ""
+  ].filter(Boolean);
+  $("#calendar-day-count").textContent = dayCounts.join(" · ");
+  const dayItems = [
+    ...dayEvents.map((item) => ({ kind: "competition", ...item })),
+    ...dayPlannedWorkouts.map((item) => ({ kind: "workout", ...item }))
+  ].sort((a, b) => {
+    const aTime = a.kind === "workout" ? a.time : a.event.allDay ? "00:00" : formatCalendarDate(a.event.date, { hour: "2-digit", minute: "2-digit" });
+    const bTime = b.kind === "workout" ? b.time : b.event.allDay ? "00:00" : formatCalendarDate(b.event.date, { hour: "2-digit", minute: "2-digit" });
+    return aTime.localeCompare(bTime);
+  });
+  $("#calendar-day-events").innerHTML = dayItems.length ? dayItems.map((item) => {
+    if (item.kind === "workout") {
+      return `<article class="calendar-event is-planned-workout">
+        <time datetime="${escapeHTML(`${selectedCalendarDate}T${item.time}`)}">${escapeHTML(item.time)}</time>
+        <div class="calendar-event-copy"><h3>${escapeHTML(item.workoutName)}</h3><p>Heti ismétlődő edzés</p></div>
+        <span class="calendar-event-dot is-workout" aria-label="Edzés"></span>
+      </article>`;
+    }
+    const { sport, event } = item;
+    const options = { hour: "2-digit", minute: "2-digit" };
+    if (event.timeZone) options.timeZone = event.timeZone;
+    const timeLabel = event.allDay ? "Egész nap" : formatCalendarDate(event.date, options);
+    const source = COMPETITION_SOURCES[SPORT_OPTIONS[sport].source];
+    return `<article class="calendar-event${event.profileMatch ? " is-profile-match" : ""}">
+      <time datetime="${escapeHTML(dateTimeAttribute(event.date, event.allDay))}">${escapeHTML(timeLabel)}</time>
+      <div class="calendar-event-copy"><h3>${escapeHTML(event.title)}</h3><p>${escapeHTML(SPORT_OPTIONS[sport].source === "canoe" ? "Kajak-kenu" : SPORT_OPTIONS[sport].label)}${event.location ? ` · ${escapeHTML(event.location)}` : ""}</p>
+        ${event.profileMatch ? `<span class="calendar-event-match"><i data-lucide="user-round-check" aria-hidden="true"></i> Profil alapján egyezik</span>` : ""}
+      </div>
+      <a href="${escapeHTML(safeCompetitionUrl(event.url, source))}" target="_blank" rel="noopener" aria-label="Versenyrészletek: ${escapeHTML(event.title)}"><i data-lucide="arrow-up-right" aria-hidden="true"></i></a>
+    </article>`;
+  }).join("") : '<p class="calendar-day-empty">Erre a napra nincs verseny vagy betervezett edzés.</p>';
+  renderLucide($("#calendar-day-events"));
+  renderPlannedWorkoutOptions();
+  renderPlannedWorkouts();
+
+  const noSports = data.sports.length === 0;
+  const allSourcesFailed = !noSports && calendarEvents.length === 0 && $("#calendar-status").dataset.failed === "true";
+  $("#calendar-empty").hidden = !noSports && !allSourcesFailed;
+  $("#calendar-empty-message").textContent = noSports
+    ? "Válassz sportágakat a versenynaptár összeállításához."
+    : allSourcesFailed
+      ? "A kiválasztott hivatalos naptárak most nem érhetők el."
+      : "";
+}
+
+async function loadCalendarEvents() {
+  const requestId = ++calendarRequestId;
+  calendarEvents = [];
+  $("#calendar-status").dataset.failed = "false";
+  if (!data.sports.length) {
+    $("#calendar-status").hidden = true;
+    renderCalendar();
+    return;
+  }
+  $("#calendar-status").hidden = false;
+  $("#calendar-status").textContent = "Hivatalos versenynaptárak betöltése…";
+  renderCalendar();
+  const sportsBySource = new Map();
+  for (const sport of data.sports) {
+    const sourceKey = SPORT_OPTIONS[sport].source;
+    if (!sportsBySource.has(sourceKey)) sportsBySource.set(sourceKey, sport);
+  }
+  const results = await Promise.allSettled(Array.from(sportsBySource, async ([sourceKey, sport]) => {
+    const events = await getCompetitionEvents(sourceKey);
+    rememberProfileCompetitions(sourceKey, events);
+    checkTrackedCompetitionResults(sourceKey);
+    return { sourceKey, sport, events };
+  }));
+  if (requestId !== calendarRequestId || $("#screen-calendar").hidden) return;
+  const failures = [];
+  for (const result of results) {
+    if (result.status === "rejected") {
+      failures.push(result.reason);
+      continue;
+    }
+    const { sport, events } = result.value;
+    calendarEvents.push(...events.map((event) => ({ sport, event })));
+    enrichCompetitionNotices(sport, events);
+  }
+  calendarEvents.sort((a, b) => a.event.date - b.event.date);
+  $("#calendar-status").dataset.failed = String(failures.length === results.length);
+  $("#calendar-status").hidden = failures.length === 0;
+  $("#calendar-status").textContent = failures.length === results.length
+    ? "A kiválasztott hivatalos naptárak most nem érhetők el."
+    : failures.length
+      ? "Néhány hivatalos naptár nem érhető el. A többi kiválasztott sportág eseményei továbbra is láthatók."
+      : "";
+  renderCalendar();
 }
 
 function getReaderDate(monthName, day, year, hour = 0, minute = 0) {
@@ -556,6 +786,218 @@ function keepUpcomingEvents(events) {
     .sort((a, b) => a.date - b.date);
 }
 
+function normalizeCompetitionText(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("hu-HU")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function containsCompetitionPhrase(text, phrase) {
+  const normalizedText = normalizeCompetitionText(text);
+  const normalizedPhrase = normalizeCompetitionText(phrase);
+  return Boolean(normalizedPhrase && ` ${normalizedText} `.includes(` ${normalizedPhrase} `));
+}
+
+function profileGenderConflict(text) {
+  const normalizedText = ` ${normalizeCompetitionText(text)} `;
+  const isMaleCategory = / (ferfi|fiu|fiuk|boys|men) /.test(normalizedText);
+  const isFemaleCategory = / (noi|lany|lanyok|girls|women) /.test(normalizedText);
+  return (data.profile.gender === "male" && isFemaleCategory && !isMaleCategory)
+    || (data.profile.gender === "female" && isMaleCategory && !isFemaleCategory);
+}
+
+function scoreCompetitionForProfile(officialText, sourceKey) {
+  const text = String(officialText ?? "");
+  if (!text.trim() || profileGenderConflict(text)) return null;
+
+  const name = normalizeCompetitionText(data.profile.name);
+  const nameParts = name.split(" ").filter(Boolean);
+  const nameMatch = nameParts.length >= 1 && (
+    containsCompetitionPhrase(text, name)
+    || (nameParts.length > 1 && containsCompetitionPhrase(text, nameParts.slice().reverse().join(" ")))
+  );
+  const club = normalizeCompetitionText(data.profile.club);
+  const clubMatch = club.length >= 3 && containsCompetitionPhrase(text, club);
+  const genderMatch = data.profile.gender !== "" && (
+    profileGenderConflict(text) === false
+    && ((data.profile.gender === "male" && /\b(?:férfi|fiú|fiúk)\b/i.test(text))
+      || (data.profile.gender === "female" && /\b(?:női|lány|lányok)\b/i.test(text)))
+  );
+  const score = (nameMatch ? (nameParts.length > 1 ? 0.8 : 0.5) : 0)
+    + (clubMatch ? (TEAM_SPORT_SOURCES.has(sourceKey) ? 0.7 : 0.25) : 0)
+    + (genderMatch ? 0.1 : 0);
+  const threshold = TEAM_SPORT_SOURCES.has(sourceKey) ? 0.65 : 0.75;
+  if (score < threshold) return null;
+  return { score, reason: nameMatch ? "névegyezés" : "egyesületi egyezés" };
+}
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function competitionDateKey(event) {
+  if (event.allDay || !event.timeZone) return localDateKey(event.date);
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: event.timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(event.date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function competitionEventKey(sourceKey, event) {
+  return [sourceKey, normalizeCompetitionText(event.title), competitionDateKey(event), event.url].join("|");
+}
+
+function rememberProfileCompetitions(sourceKey, events) {
+  let changed = false;
+  for (const event of events) {
+    const match = scoreCompetitionForProfile(
+      [event.title, event.subtitle, event.location, event.officialText].filter(Boolean).join(" "),
+      sourceKey
+    );
+    event.profileMatch = Boolean(match);
+    event.profileMatchReason = match?.reason || "";
+    if (!match || !event.url) continue;
+
+    const key = competitionEventKey(sourceKey, event);
+    if (data.followedCompetitions.some((item) => item.key === key)) continue;
+    data.followedCompetitions.push({
+      key,
+      sourceKey,
+      title: event.title,
+      date: competitionDateKey(event),
+      dateTime: event.date.toISOString(),
+      allDay: Boolean(event.allDay),
+      url: event.url,
+      profileMatchReason: match.reason,
+      lastCheckedAt: 0
+    });
+    changed = true;
+  }
+  if (data.followedCompetitions.length > 100) {
+    data.followedCompetitions.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    data.followedCompetitions.length = 100;
+    changed = true;
+  }
+  if (changed) saveData();
+}
+
+function extractCompetitionResult(line, sourceKey) {
+  const normalizedLine = normalizeCompetitionText(line);
+  const medal = normalizedLine.match(/\b(arany|ezust|bronz)(?:erem|ermes)?\b/);
+  if (medal) return medal[1] === "arany" ? "Aranyérem" : medal[1] === "ezust" ? "Ezüstérem" : "Bronzérem";
+
+  const labeledPlace = normalizedLine.match(/\b(\d{1,3})\s*\.?\s*(?:helyezett|helyezes|hely|place|position)\b/);
+  if (labeledPlace) return `${labeledPlace[1]}. hely`;
+  const numberedResult = line.match(/^\s*(\d{1,3})[.)]\s+/);
+  if (numberedResult && Number(numberedResult[1]) > 0) return `${numberedResult[1]}. hely`;
+  const tablePlace = line.match(/^\s*\|\s*(\d{1,3})\s*\.?\s*\|\s*[^|]*\|?/);
+  if (tablePlace && Number(tablePlace[1]) > 0) return `${tablePlace[1]}. hely`;
+
+  const labeledResult = line.match(/(?:eredm[eé]ny|id[oő](?:eredm[eé]ny)?)\s*[:=–-]\s*([^|;,]{1,48})/i);
+  if (labeledResult) return labeledResult[1].trim();
+  const time = line.match(/\b\d{1,2}:\d{2}(?::\d{2})?(?:[,.]\d+)?\b/);
+  if (time && (line.includes("|") || /\b(?:eredm[eé]ny|id[oő]|futam|d[oő]nt[oő])\b/i.test(line))) return time[0];
+  if (TEAM_SPORT_SOURCES.has(sourceKey)) {
+    const score = line.match(/(?:^|\s)(\d{1,2})\s*[-:–]\s*(\d{1,2})(?=\s|$)/);
+    if (score) return `${score[1]}–${score[2]}`;
+  }
+  return "";
+}
+
+function findOfficialResults(text, competition) {
+  const sourceKey = competition.sourceKey;
+  const profileName = normalizeCompetitionText(data.profile.name);
+  const profileNameParts = profileName.split(" ").filter(Boolean);
+  const profileNamePhrases = profileNameParts.length >= 1
+    ? [profileName, profileNameParts.slice().reverse().join(" ")]
+    : [];
+  const profileClub = normalizeCompetitionText(data.profile.club);
+  const results = [];
+
+  for (const rawLine of String(text ?? "").split(/\r?\n/)) {
+    const line = rawLine.replace(/!\[[^\]]*\]\([^)]*\)|\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/[*`_#]/g, "").trim();
+    if (!line || profileGenderConflict(`${line} ${competition.title}`)) continue;
+    const nameOnLine = profileNamePhrases.some((phrase) => containsCompetitionPhrase(line, phrase))
+      && (profileNameParts.length > 1 || (profileClub.length >= 3 && containsCompetitionPhrase(line, profileClub)));
+    const clubOnTeamLine = TEAM_SPORT_SOURCES.has(sourceKey)
+      && profileClub.length >= 3
+      && containsCompetitionPhrase(line, profileClub);
+    if (!nameOnLine && !clubOnTeamLine) continue;
+
+    const place = extractCompetitionResult(line, sourceKey);
+    if (!place) continue;
+    results.push({
+      name: competition.title,
+      place,
+      date: competition.date,
+      sourceKey,
+      competitionKey: competition.key,
+      sourceUrl: competition.url,
+      official: true
+    });
+  }
+  return results;
+}
+
+function addOfficialCompetitionResults(results) {
+  let added = 0;
+  for (const result of results) {
+    const externalKey = [
+      result.sourceKey,
+      result.competitionKey,
+      normalizeCompetitionText(result.place)
+    ].join("|");
+    if (data.dismissedCompetitionResults.includes(externalKey)
+      || data.results.some((item) => item.externalKey === externalKey)) continue;
+    data.results.unshift({ id: makeId(), externalKey, ...result });
+    added += 1;
+  }
+  if (!added) return;
+  if (saveData()) {
+    renderResults();
+    showToast(added === 1
+      ? "Hivatalos versenyeredményt adtunk az eredményeidhez."
+      : `${added} hivatalos versenyeredményt adtunk az eredményeidhez.`);
+  }
+}
+
+async function checkTrackedCompetitionResults(sourceKey) {
+  const source = COMPETITION_SOURCES[sourceKey];
+  if (!source || (!data.profile.name.trim() && !data.profile.club.trim())) return;
+  const today = localDateKey(new Date());
+  const resultCheckCutoff = Date.now() - (6 * 60 * 60 * 1000);
+  const candidates = data.followedCompetitions
+    .filter((item) => item.sourceKey === sourceKey
+      && (item.allDay || !item.dateTime ? item.date < today : Date.parse(item.dateTime) <= resultCheckCutoff)
+      && Date.now() - Number(item.lastCheckedAt || 0) >= 6 * 60 * 60 * 1000)
+    .slice(0, 2);
+  for (const competition of candidates) {
+    competition.lastCheckedAt = Date.now();
+    saveData();
+    try {
+      const text = await fetchOfficialCompetitionPage(competition.url, source);
+      addOfficialCompetitionResults(findOfficialResults(text, competition));
+    } catch (error) {
+      console.error("A hivatalos versenyeredmény ellenőrzése nem sikerült.", error);
+      const status = $("#competition-result-status");
+      if (status) {
+        status.hidden = false;
+        status.textContent = "Egy korábbi, hozzád illő verseny hivatalos eredményoldala most nem ellenőrizhető.";
+      }
+      competition.lastCheckedAt = Date.now() - (5 * 60 * 60 * 1000);
+      saveData();
+    }
+  }
+}
+
 function parseCanoeEvents(text, source) {
   const events = [];
   const entries = [...text.matchAll(/\[([^\]]*?)###\s*([^\]]+)\]\((https?:\/\/[^)]+\/naptar\/(\d{4})\/[^)]+)\)/g)];
@@ -571,7 +1013,8 @@ function parseCanoeEvents(text, source) {
       date,
       allDay: true,
       location: metadata.slice(dateMatch.index + dateMatch[0].length).trim(),
-      url: safeCompetitionUrl(path, source)
+      url: safeCompetitionUrl(path, source),
+      officialText: `${title} ${metadata}`
     });
   }
   if (!events.length) throw new Error("A kajak-kenu naptárból nem sikerült eseményeket beolvasni.");
@@ -594,13 +1037,15 @@ function parseRowingEvents(text, source) {
       start[2] ? Number(start[2].slice(2, 4)) : 0
     );
     const location = block.match(/^LOCATION(?:;[^:]*)?:(.*)$/m)?.[1] || "";
+    const description = block.match(/^DESCRIPTION(?:;[^:]*)?:(.*)$/m)?.[1] || "";
     const url = block.match(/^URL(?:;[^:]*)?:(\S+)/m)?.[1] || source.url;
     events.push({
       title: decodeCalendarText(summary[1]),
       date,
       allDay: !start[2],
       location: decodeCalendarText(location),
-      url: safeCompetitionUrl(url, source)
+      url: safeCompetitionUrl(url, source),
+      officialText: `${decodeCalendarText(summary[1])} ${decodeCalendarText(location)} ${decodeCalendarText(description)}`
     });
   }
   return keepUpcomingEvents(events);
@@ -631,7 +1076,8 @@ function parseWaterPoloEvents(text, source) {
       timeZone: "Europe/Budapest",
       allDay: !match[3],
       location: venue,
-      url: safeCompetitionUrl(competition?.[2], source)
+      url: safeCompetitionUrl(competition?.[2], source),
+      officialText: `${home || ""} ${away || ""} ${competition?.[1] || ""} ${venue}`
     };
   }).filter(Boolean));
 }
@@ -664,7 +1110,8 @@ function parseFootballEvents(text, source) {
       date,
       allDay: false,
       location: "",
-      url: source.url
+      url: source.url,
+      officialText: `${home?.[1] || ""} ${away?.[1] || ""} OTP Bank Liga`
     };
   }));
 }
@@ -687,6 +1134,80 @@ async function fetchCompetitionReader(source) {
     return await response.text();
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function fetchOfficialCompetitionPage(url, source) {
+  const officialUrl = safeCompetitionUrl(url, source);
+  const cached = competitionNoticeCache.get(officialUrl);
+  if (cached && Date.now() - cached.loadedAt < COMPETITION_CACHE_DURATION) return cached.text;
+  const parsedUrl = new URL(officialUrl);
+  const readerUrl = `https://r.jina.ai/http://${parsedUrl.host}${parsedUrl.pathname}${parsedUrl.search}`;
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(readerUrl, {
+      cache: "no-store",
+      headers: { Accept: "text/plain" },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Hivatalos versenyoldal lekérése sikertelen (${response.status}).`);
+    const text = await response.text();
+    competitionNoticeCache.set(officialUrl, { text, loadedAt: Date.now() });
+    return text;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function enrichCompetitionNotices(sport, events) {
+  if (!data.profile.name.trim() && !data.profile.club.trim()) return;
+  const sourceKey = SPORT_OPTIONS[sport].source;
+  const source = COMPETITION_SOURCES[sourceKey];
+  const primaryUrl = safeCompetitionUrl(source.url, source);
+  const seenUrls = new Set();
+  const candidates = events.filter((event) => {
+    if (scoreCompetitionForProfile(
+      [event.title, event.subtitle, event.location, event.officialText].filter(Boolean).join(" "),
+      sourceKey
+    )) return false;
+    const url = safeCompetitionUrl(event.url, source);
+    if (url === primaryUrl || seenUrls.has(url)) return false;
+    seenUrls.add(url);
+    return true;
+  }).slice(0, 12);
+  if (!candidates.length) return;
+
+  $("#competition-status").hidden = false;
+  $("#competition-status").textContent = "A hivatalos versenykiírások helyi ellenőrzése…";
+  let failed = false;
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(3, candidates.length) }, async () => {
+    while (nextIndex < candidates.length) {
+      const event = candidates[nextIndex];
+      nextIndex += 1;
+      try {
+        event.officialText = `${event.officialText || ""}\n${await fetchOfficialCompetitionPage(event.url, source)}`;
+      } catch (error) {
+        failed = true;
+        console.error(`${source.name} hivatalos versenykiírásának ellenőrzése nem sikerült.`, error);
+      }
+    }
+  });
+  await Promise.all(workers);
+  rememberProfileCompetitions(sourceKey, events);
+  if (lastMainScreen === "calendar" && !$("#screen-calendar").hidden) {
+    calendarEvents = calendarEvents.map((item) => item.sport === sport ? { ...item, event: events.find((event) => competitionEventKey(sourceKey, event) === competitionEventKey(sourceKey, item.event)) || item.event } : item);
+    renderCalendar();
+    return;
+  }
+  if (lastMainScreen !== "competitions"
+    || currentCompetitionTab !== `sport:${sport}`
+    || $("#screen-competitions").hidden) return;
+  renderCompetitionEvents(sport, events);
+  if (failed) {
+    $("#competition-status").hidden = false;
+    $("#competition-status").textContent = "Egyes hivatalos versenykiírásokat most nem sikerült ellenőrizni.";
   }
 }
 
@@ -718,17 +1239,27 @@ async function getCompetitionEvents(sourceKey, forceRefresh = false) {
 }
 
 function renderCompetitionEvents(sport, events) {
-  const source = COMPETITION_SOURCES[SPORT_OPTIONS[sport].source];
+  const sourceKey = SPORT_OPTIONS[sport].source;
+  const source = COMPETITION_SOURCES[sourceKey];
   const list = $("#competition-events");
+  $("#competition-status").hidden = true;
+  $("#competition-result-status").hidden = true;
   if (!events.length) {
     $("#competition-empty").hidden = false;
     $("#competition-empty").innerHTML = `Nincsenek közelgő versenyek.<br><a href="${escapeHTML(source.url)}" target="_blank" rel="noopener">Hivatalos naptár megnyitása</a>`;
     list.hidden = true;
+    checkTrackedCompetitionResults(sourceKey);
     return;
   }
+  rememberProfileCompetitions(sourceKey, events);
   $("#competition-empty").hidden = true;
   list.hidden = false;
+  const hasProfileIdentifiers = Boolean(data.profile.name.trim() || data.profile.club.trim());
+  const profileNote = hasProfileIdentifiers
+    ? "A kék keret helyi, szabályalapú név- és egyesületi egyezést jelez (nem nyelvi modell); az eredményeket az esemény után ellenőrizzük, személyes adat nem kerül továbbításra."
+    : "A név és egyesület megadásával jelöljük a hozzád illő versenyeket.";
   list.innerHTML = `<a class="competition-source" href="${escapeHTML(source.url)}" target="_blank" rel="noopener">${escapeHTML(source.name)} · Hivatalos naptár <i data-lucide="external-link" aria-hidden="true"></i></a>
+    <p class="competition-match-note">${profileNote}</p>
     ${events.map((event) => {
       const dateOptions = { month: "short", day: "numeric", weekday: "short" };
       const timeOptions = { hour: "2-digit", minute: "2-digit" };
@@ -737,15 +1268,17 @@ function renderCompetitionEvents(sport, events) {
         timeOptions.timeZone = event.timeZone;
       }
       return `
-      <article class="competition-card neumorph-card">
+      <article class="competition-card neumorph-card${event.profileMatch ? " is-profile-match" : ""}">
         <time datetime="${escapeHTML(dateTimeAttribute(event.date, event.allDay))}">${escapeHTML(dateLabel(event.date, dateOptions))}${event.allDay ? "" : ` · ${escapeHTML(new Intl.DateTimeFormat("hu-HU", timeOptions).format(event.date))}`}</time>
         <h2>${escapeHTML(event.title)}</h2>
+        ${event.profileMatch ? `<p class="competition-match-badge"><i data-lucide="user-round-check" aria-hidden="true"></i> Profil alapján egyezik · ${escapeHTML(event.profileMatchReason)}</p>` : ""}
         ${event.subtitle ? `<p class="competition-subtitle">${escapeHTML(event.subtitle)}</p>` : ""}
         ${event.location ? `<p class="competition-location"><i data-lucide="map-pin" aria-hidden="true"></i>${escapeHTML(event.location)}</p>` : ""}
         <a class="competition-card-link" href="${escapeHTML(event.url)}" target="_blank" rel="noopener">Részletek <i data-lucide="arrow-up-right" aria-hidden="true"></i></a>
       </article>`;
     }).join("")}`;
   renderLucide(list);
+  checkTrackedCompetitionResults(sourceKey);
 }
 
 async function loadCompetitionEvents(sport, forceRefresh = false) {
@@ -761,6 +1294,7 @@ async function loadCompetitionEvents(sport, forceRefresh = false) {
     if (requestId !== competitionRequestId || lastMainScreen !== "competitions" || !internetAvailable) return;
     $("#competition-status").hidden = true;
     renderCompetitionEvents(sport, events);
+    enrichCompetitionNotices(sport, events);
   } catch (error) {
     console.error(`${source.name} naptárának betöltése nem sikerült.`, error);
     if (requestId !== competitionRequestId || lastMainScreen !== "competitions" || !internetAvailable) return;
@@ -777,6 +1311,53 @@ window.addEventListener("offline", updateConnection);
 $("#competition-retry").addEventListener("click", () => {
   const sport = data.sports.find((item) => `sport:${item}` === currentCompetitionTab);
   if (sport) loadCompetitionEvents(sport, true);
+});
+$("#calendar-grid").addEventListener("click", (event) => {
+  const day = event.target.closest("[data-calendar-date]");
+  if (!day) return;
+  selectedCalendarDate = day.dataset.calendarDate;
+  renderCalendar();
+});
+$("#calendar-previous-month").addEventListener("click", () => {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1);
+  selectedCalendarDate = localDateKey(calendarMonth);
+  renderCalendar();
+});
+$("#calendar-next-month").addEventListener("click", () => {
+  calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1);
+  selectedCalendarDate = localDateKey(calendarMonth);
+  renderCalendar();
+});
+$("#planned-workout-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const workout = data.workouts.find((item) => item.id === $("#planned-workout-template").value);
+  const weekday = Number($("#planned-workout-weekday").value);
+  const time = $("#planned-workout-time").value;
+  if (!workout || !Number.isInteger(weekday) || weekday < 1 || weekday > 7 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+    showToast("Válassz edzéstervet, napot és kezdési időpontot.");
+    return;
+  }
+  if (data.plannedWorkouts.some((item) => item.workoutId === workout.id && item.weekday === weekday && item.time === time)) {
+    showToast("Ez az edzés már szerepel ezen a napon és időpontban.");
+    return;
+  }
+  data.plannedWorkouts.push({
+    id: makeId(),
+    workoutId: workout.id,
+    workoutName: workout.name,
+    weekday,
+    time,
+    createdAt: new Date().toISOString()
+  });
+  if (!saveData("Heti edzésterv hozzáadva.")) return;
+  event.currentTarget.reset();
+  renderCalendar();
+});
+$("#planned-workout-list").addEventListener("click", (event) => {
+  const remove = event.target.closest("[data-delete-planned-workout]");
+  if (!remove) return;
+  data.plannedWorkouts = data.plannedWorkouts.filter((item) => item.id !== remove.dataset.deletePlannedWorkout);
+  if (saveData("Töröltük a heti edzéstervet.")) renderCalendar();
 });
 $("#retry-connection").addEventListener("click", () => {
   updateConnection().then((online) => {
@@ -941,7 +1522,7 @@ function advanceTimer(delta) {
             timerRunning = false;
             clearInterval(timerInterval);
             timerInterval = null;
-            recordSession(workElapsed, MODE_LABELS.interval);
+            askSessionInclusion(workElapsed, MODE_LABELS.interval);
             loggedTimerElapsed = timerElapsed;
             playIntervalBeep("finish");
             showToast("Minden kör kész — szép munka!");
@@ -967,7 +1548,7 @@ function advanceTimer(delta) {
     timerRunning = false;
     clearInterval(timerInterval);
     timerInterval = null;
-    recordSession(completed, "Visszaszámláló");
+    askSessionInclusion(completed, "Visszaszámláló");
     loggedTimerElapsed = countdownSeconds;
     playIntervalBeep("finish");
     showToast("Lejárt az időzítő. Szép munka!");
@@ -976,6 +1557,7 @@ function advanceTimer(delta) {
 }
 
 function startTimer() {
+  if (pendingSessionInclusion) return;
   resumeTimerAudio();
   if (timerMode === "countdown" && timerElapsed >= countdownSeconds) {
     timerElapsed = 0;
@@ -1004,7 +1586,7 @@ function startTimer() {
       advanceTimer(delta);
       if (timerMode === "interval" && timerRunning) {
         if (isWorkPhase !== previousWorkPhase) {
-          playIntervalBeep(isWorkPhase ? "work" : "rest");
+          playIntervalBeep("transition");
         } else {
           const previousSecond = Math.ceil(previousPhaseRemaining);
           const currentSecond = Math.ceil(phaseRemaining);
@@ -1043,22 +1625,27 @@ function resumeTimerAudio() {
 function playIntervalBeep(kind = "countdown") {
   if (!timerAudioContext || timerAudioContext.state !== "running") return;
   if (timerReferenceBuffer) {
-    const playReference = (offset = 0, peak = 1) => {
+    const playReference = (offset = 0, peak = 1, duration = 0.475) => {
       const source = timerAudioContext.createBufferSource();
       const volume = timerAudioContext.createGain();
       source.buffer = timerReferenceBuffer;
-      volume.gain.setValueAtTime(0.0001, timerAudioContext.currentTime + offset);
-      volume.gain.exponentialRampToValueAtTime(peak, timerAudioContext.currentTime + offset + 0.012);
-      volume.gain.exponentialRampToValueAtTime(peak * 0.72, timerAudioContext.currentTime + offset + 0.38);
-      volume.gain.exponentialRampToValueAtTime(0.0001, timerAudioContext.currentTime + offset + 0.475);
+      const startTime = timerAudioContext.currentTime + offset;
+      source.playbackRate.setValueAtTime(Math.min(1, timerReferenceBuffer.duration / duration), startTime);
+      volume.gain.setValueAtTime(0.0001, startTime);
+      volume.gain.exponentialRampToValueAtTime(peak, startTime + 0.012);
+      volume.gain.exponentialRampToValueAtTime(peak * 0.72, startTime + duration * 0.78);
+      volume.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
       source.connect(volume);
       volume.connect(timerAudioContext.destination);
-      source.start(timerAudioContext.currentTime + offset);
+      source.start(startTime);
+      source.stop(startTime + duration);
     };
     if (kind === "finish") {
-      playReference(0, 1);
-      playReference(0.22, 1);
-      playReference(0.44, 1);
+      playReference(0, 1, 0.14);
+      playReference(0.24, 1, 0.14);
+      playReference(0.48, 1, 0.65);
+    } else if (kind === "transition") {
+      playReference(0, 0.95, 0.8);
     } else if (kind === "work") {
       playReference(0, 1);
     } else if (kind === "rest") {
@@ -1101,10 +1688,12 @@ function playIntervalBeep(kind = "countdown") {
   } else if (kind === "rest") {
     playTone(523.25, now, 0.22, 0.9);
     playTone(783.99, now + 0.18, 0.32, 0.95);
+  } else if (kind === "transition") {
+    playTone(1046.5, now, 0.8, 1);
   } else if (kind === "finish") {
-    playTone(784, now, 0.26, 1);
-    playTone(987.77, now + 0.24, 0.26, 1);
-    playTone(1318.5, now + 0.48, 0.58, 1);
+    playTone(784, now, 0.14, 1);
+    playTone(987.77, now + 0.24, 0.14, 1);
+    playTone(1318.5, now + 0.48, 0.65, 1);
   } else {
     playTone(880, now, 0.22, 1);
   }
@@ -1117,7 +1706,7 @@ function pauseTimer(save = true) {
   timerInterval = null;
   const completedSeconds = timerMode === "interval" ? workElapsed : timerElapsed - loggedTimerElapsed;
   if (save && completedSeconds >= 5) {
-    recordSession(completedSeconds, MODE_LABELS[timerMode]);
+    askSessionInclusion(completedSeconds, MODE_LABELS[timerMode]);
     if (timerMode !== "interval") loggedTimerElapsed = timerElapsed;
   }
   workElapsed = 0;
@@ -1165,13 +1754,55 @@ $$(".dial-mode-label").forEach((label) => {
   label.addEventListener("click", () => selectTimerMode(TIMER_MODES.indexOf(label.dataset.mode)));
 });
 
-function recordSession(seconds, name) {
-  if (!Number.isFinite(seconds) || seconds < 1) return;
-  data.sessions.unshift({ id: makeId(), name, seconds: Math.floor(seconds), endedAt: new Date().toISOString() });
+function recordSession(seconds, name, countsTowardTraining = true, notification = "Az edzés bekerült a naplóba.") {
+  if (!Number.isFinite(seconds) || seconds < 1) return null;
+  const session = {
+    id: makeId(),
+    name,
+    seconds: Math.floor(seconds),
+    endedAt: new Date().toISOString(),
+    countsTowardTraining
+  };
+  data.sessions.unshift(session);
   data.sessions.length = Math.min(data.sessions.length, 500);
-  saveData("Az edzés bekerült a naplóba.");
+  saveData(notification);
   renderAll();
+  return session;
 }
+
+function askSessionInclusion(seconds, name) {
+  if (pendingSessionInclusion) return;
+  const session = recordSession(seconds, name, false, "");
+  if (!session) return;
+  pendingSessionInclusion = session.id;
+  sessionInclusionTrigger = document.activeElement;
+  $("#session-inclusion-summary").textContent = `${name} · ${formatDuration(session.seconds)}`;
+  $("#session-inclusion-backdrop").hidden = false;
+  document.body.classList.add("sheet-open");
+  $("#session-include-button").focus();
+}
+
+function resolveSessionInclusion(countsTowardTraining) {
+  if (!pendingSessionInclusion) return;
+  const session = data.sessions.find((item) => item.id === pendingSessionInclusion);
+  const trigger = sessionInclusionTrigger;
+  pendingSessionInclusion = null;
+  sessionInclusionTrigger = null;
+  $("#session-inclusion-backdrop").hidden = true;
+  if ($("#sport-sheet-backdrop").hidden) document.body.classList.remove("sheet-open");
+  if (session && countsTowardTraining) session.countsTowardTraining = true;
+  saveData(countsTowardTraining
+    ? "Az edzés beleszámít a napi edzésidőbe."
+    : "Az edzés elmentve, de nem számít bele a napi edzésidőbe.");
+  renderAll();
+  if (trigger instanceof HTMLElement && document.contains(trigger)) trigger.focus();
+}
+
+$("#session-include-button").addEventListener("click", () => resolveSessionInclusion(true));
+$("#session-exclude-button").addEventListener("click", () => resolveSessionInclusion(false));
+$("#session-inclusion-backdrop").addEventListener("click", (event) => {
+  if (event.target === $("#session-inclusion-backdrop")) resolveSessionInclusion(false);
+});
 
 function addRound() {
   const container = $("#round-list");
@@ -1540,7 +2171,8 @@ function renderProgress() {
     date.setDate(weekStart.getDate() + index);
     return date;
   });
-  const totals = dates.map((date) => data.sessions.reduce((sum, session) => {
+  const countableSessions = data.sessions.filter((session) => session.countsTowardTraining !== false);
+  const totals = dates.map((date) => countableSessions.reduce((sum, session) => {
     const sessionDate = new Date(session.endedAt);
     sessionDate.setHours(0, 0, 0, 0);
     return sessionDate.getTime() === date.getTime() ? sum + (Number(session.seconds) || 0) : sum;
@@ -1548,7 +2180,7 @@ function renderProgress() {
   const previousTotals = dates.map((date) => {
     const previousDate = new Date(date);
     previousDate.setDate(previousDate.getDate() - 7);
-    return data.sessions.reduce((sum, session) => {
+    return countableSessions.reduce((sum, session) => {
       const sessionDate = new Date(session.endedAt);
       sessionDate.setHours(0, 0, 0, 0);
       return sessionDate.getTime() === previousDate.getTime() ? sum + (Number(session.seconds) || 0) : sum;
@@ -1561,15 +2193,16 @@ function renderProgress() {
     const minutes = seconds / 60;
     const x = 32 + index * 96;
     const y = 235 - (minutes / maxMinutes) * 180;
-    return { x, y, index, label: labels[index], minutes, date: dateLabel(dates[index], { weekday: "long", day: "numeric" }) };
+    return { x, y, index, label: labels[index], minutes, seconds, date: dateLabel(dates[index], { weekday: "long", day: "numeric" }) };
   });
   const linePoints = chartPoints.map((point) => `${point.x},${point.y}`).join(" ");
-  $("#chart-container").innerHTML = `<svg class="line-chart" viewBox="0 0 640 300" role="img" aria-label="E heti edzésidő napokra bontva, percben">
+  $("#chart-container").innerHTML = `<svg class="line-chart" viewBox="0 0 640 300" role="img" aria-label="E heti edzésidő napokra bontva">
     <defs><linearGradient id="chart-area-gradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ff8748" stop-opacity=".3" /><stop offset="100%" stop-color="#ff8748" stop-opacity="0" /></linearGradient></defs>
     <g class="chart-guides" aria-hidden="true"><path d="M24 55H616M24 145H616M24 235H616" /></g>
     <polygon class="chart-area" points="${linePoints} 608,235 32,235" />
     <polyline class="chart-line" points="${linePoints}" />
-    ${chartPoints.map((point) => `<g class="chart-point${point.index === todayIndex ? " today" : ""}"><title>${point.date}: ${Math.round(point.minutes)} perc</title><circle cx="${point.x}" cy="${point.y}" r="9" /></g>`).join("")}
+    ${chartPoints.map((point) => `<g class="chart-point${point.index === todayIndex ? " today" : ""}"><title>${point.date}: ${formatDuration(point.seconds)}</title><circle cx="${point.x}" cy="${point.y}" r="9" /></g>`).join("")}
+    ${chartPoints.filter((point) => point.seconds > 0).map((point) => `<text class="chart-value" x="${point.x}" y="${Math.max(28, point.y - 17)}" text-anchor="middle">${formatDuration(point.seconds)}</text>`).join("")}
     ${chartPoints.map((point) => `<text class="chart-day${point.index === todayIndex ? " today" : ""}" x="${point.x}" y="280" text-anchor="middle">${point.label}</text>`).join("")}
   </svg>`;
   const weeklySeconds = totals.reduce((sum, seconds) => sum + seconds, 0);
@@ -1596,17 +2229,18 @@ function renderProgress() {
     homeChange.textContent = weeklySeconds > 0 ? "Új adat" : "—";
     homeChange.className = "home-chart-change is-steady";
   }
-  $("#home-chart-container").innerHTML = `<svg class="line-chart home-line-chart" viewBox="0 0 640 300" role="img" aria-label="E heti edzésidő napokra bontva, percben">
+  $("#home-chart-container").innerHTML = `<svg class="line-chart home-line-chart" viewBox="0 0 640 300" role="img" aria-label="E heti edzésidő napokra bontva">
     <defs><linearGradient id="home-chart-area-gradient" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#ff8748" stop-opacity=".22" /><stop offset="100%" stop-color="#ff8748" stop-opacity="0" /></linearGradient></defs>
     <g class="chart-guides" aria-hidden="true"><path d="M24 55H616M24 145H616M24 235H616" /></g>
     <polygon class="chart-area" points="${linePoints} 608,235 32,235" style="fill:url(#home-chart-area-gradient)" />
     <polyline class="chart-line" points="${linePoints}" />
-    ${chartPoints.map((point) => `<g class="chart-point${point.index === todayIndex ? " today" : ""}"><title>${point.date}: ${Math.round(point.minutes)} perc</title><circle cx="${point.x}" cy="${point.y}" r="9" /></g>`).join("")}
+    ${chartPoints.map((point) => `<g class="chart-point${point.index === todayIndex ? " today" : ""}"><title>${point.date}: ${formatDuration(point.seconds)}</title><circle cx="${point.x}" cy="${point.y}" r="9" /></g>`).join("")}
+    ${chartPoints.filter((point) => point.seconds > 0).map((point) => `<text class="chart-value" x="${point.x}" y="${Math.max(28, point.y - 17)}" text-anchor="middle">${formatDuration(point.seconds)}</text>`).join("")}
     ${chartPoints.map((point) => `<text class="chart-day${point.index === todayIndex ? " today" : ""}" x="${point.x}" y="280" text-anchor="middle">${point.label}</text>`).join("")}
   </svg>`;
   const nextWeekStart = new Date(weekStart);
   nextWeekStart.setDate(nextWeekStart.getDate() + 7);
-  const weeklySessions = data.sessions.filter((session) => {
+  const weeklySessions = countableSessions.filter((session) => {
     const sessionDate = new Date(session.endedAt);
     sessionDate.setHours(0, 0, 0, 0);
     return sessionDate >= weekStart && sessionDate < nextWeekStart;
@@ -1616,7 +2250,7 @@ function renderProgress() {
   $("#activity-empty").hidden = data.sessions.length > 0;
   $("#activity-list").innerHTML = data.sessions.slice(0, 8).map((session) => `
     <article class="activity-card">
-      <div><h3>${escapeHTML(session.name || "Edzés")}</h3><p class="card-meta">${dateLabel(session.endedAt, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p></div>
+      <div><h3>${escapeHTML(session.name || "Edzés")}</h3><p class="card-meta">${dateLabel(session.endedAt, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}${session.countsTowardTraining === false ? '<span class="activity-excluded-note">Nem számít bele a napi edzésidőbe</span>' : ""}</p></div>
       <span class="activity-time">${formatDuration(session.seconds)}</span>
     </article>`).join("");
   renderResults();
@@ -1626,17 +2260,26 @@ function renderProgress() {
 function renderResults() {
   const results = [...data.results].sort((a, b) => String(b.date).localeCompare(String(a.date)));
   $("#result-empty").hidden = results.length > 0;
-  $("#result-list").innerHTML = results.map((result) => `
-    <article class="activity-card">
-      <div><h3>${escapeHTML(result.name)}</h3><p class="card-meta">${escapeHTML(result.place)} · ${dateLabel(result.date, { year: "numeric", month: "short", day: "numeric" })}</p></div>
-      <button class="round-action secondary-action" type="button" data-delete-result="${escapeHTML(result.id)}" aria-label="Eredmény törlése: ${escapeHTML(result.name)}" style="width:34px;height:34px"><i data-lucide="x"></i></button>
-    </article>`).join("");
+  $("#result-list").innerHTML = results.map((result) => {
+    const source = result.official ? COMPETITION_SOURCES[result.sourceKey] : null;
+    const sourceUrl = source ? safeCompetitionUrl(result.sourceUrl, source) : "";
+    return `
+      <article class="activity-card">
+        <div><h3>${escapeHTML(result.name)}</h3><p class="card-meta">${escapeHTML(result.place)} · ${dateLabel(result.date, { year: "numeric", month: "short", day: "numeric" })}${sourceUrl ? ` · <a href="${escapeHTML(sourceUrl)}" target="_blank" rel="noopener">Hivatalos forrás</a>` : ""}</p></div>
+        <button class="round-action secondary-action" type="button" data-delete-result="${escapeHTML(result.id)}" aria-label="Eredmény törlése: ${escapeHTML(result.name)}" style="width:34px;height:34px"><i data-lucide="x"></i></button>
+      </article>`;
+  }).join("");
   renderLucide($("#result-list"));
 }
 
 $("#result-list").addEventListener("click", (event) => {
   const button = event.target.closest("[data-delete-result]");
   if (!button) return;
+  const result = data.results.find((item) => item.id === button.dataset.deleteResult);
+  if (result?.official && result.externalKey && !data.dismissedCompetitionResults.includes(result.externalKey)) {
+    data.dismissedCompetitionResults.push(result.externalKey);
+    if (data.dismissedCompetitionResults.length > 300) data.dismissedCompetitionResults.shift();
+  }
   data.results = data.results.filter((result) => result.id !== button.dataset.deleteResult);
   saveData("Töröltük az eredményt.");
   renderResults();

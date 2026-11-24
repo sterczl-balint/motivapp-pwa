@@ -74,10 +74,10 @@ button:focus-visible, a:focus-visible, input:focus-visible {
   z-index: 4;
   position: sticky;
   top: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   min-height: calc(58px + env(safe-area-inset-top));
   align-items: center;
-  justify-content: space-between;
   padding: calc(4px + env(safe-area-inset-top)) 23px 4px;
   background: rgba(17, 21, 27, .84);
   border-bottom: 1px solid rgba(255,255,255,.035);
@@ -192,6 +192,11 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 }
 
 .connection-indicator.is-offline .connection-dot { background: var(--pink); box-shadow: 0 0 9px rgba(255,132,214,.55); }
+.topbar > .profile-menu-wrap { justify-self: start; }
+.topbar > .connection-indicator { justify-self: center; font-size: 11px; }
+.token-balance { display: inline-flex; min-height: 34px; align-items: center; gap: 6px; color: var(--text); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.token-balance svg { width: 18px; height: 18px; color: var(--cyan); }
+.header-actions { display: flex; align-items: center; justify-self: end; gap: 9px; }
 
 .profile-avatar {
   display: grid;
@@ -322,9 +327,14 @@ button:focus-visible, a:focus-visible, input:focus-visible {
 .subpage-back svg { width: 21px; height: 21px; }
 .subpage-back:active { transform: scale(.96); }
 .screen .page-heading { position: relative; }
+.screen#screen-calendar .page-heading { margin: 3px 0 16px; }
 .screen-tabs { display: none !important; }
 .screen:not(#screen-profile) .page-heading h1,
 .screen:not(#screen-profile) .page-heading .page-subtitle { display: none; }
+.screen#screen-calendar .page-heading h1,
+.screen#screen-calendar .page-heading .page-subtitle { display: block; }
+.screen#screen-calendar .page-heading h1 { font-size: 30px; }
+.screen#screen-calendar .page-heading .page-subtitle { margin: 4px 0 0; }
 .screen-tabs {
   width: 100%;
   margin-top: 0;
@@ -767,16 +777,82 @@ h1 {
 .competition-status[hidden], .competition-retry[hidden], .competition-events[hidden] { display: none; }
 .competition-retry { margin: 0 auto 14px; }
 .competition-events { display: grid; gap: 12px; margin: 13px 0 25px; }
+.competition-result-status { margin: -12px 0 20px; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
+.competition-result-status[hidden] { display: none; }
 .competition-source { display: flex; min-height: 40px; align-items: center; justify-content: center; gap: 6px; color: var(--cyan); font-size: 12px; font-weight: 650; text-decoration: none; }
 .competition-source svg { width: 15px; height: 15px; }
 .competition-card { padding: 17px 18px; border-radius: 20px; }
+.competition-card.is-profile-match { border: 1px solid rgba(88,166,255,.96); box-shadow: 0 0 0 1px rgba(88,166,255,.38), 0 0 22px rgba(88,166,255,.2), var(--shadow-raised); }
 .competition-card time { display: block; margin-bottom: 8px; color: var(--mint); font-size: 13px; font-weight: 700; }
 .competition-card h2 { margin: 0; color: var(--text); font-size: 16px; line-height: 1.4; }
+.competition-match-note { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: center; }
+.competition-match-badge { display: flex; margin: 8px 0 0; align-items: center; gap: 5px; color: #82b8ff; font-size: 11px; font-weight: 650; }
+.competition-match-badge svg { width: 14px; height: 14px; flex: 0 0 auto; }
 .competition-subtitle { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 .competition-location { display: flex; margin: 10px 0 0; align-items: flex-start; gap: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .competition-location svg { width: 15px; height: 15px; flex: 0 0 auto; color: var(--cyan); }
 .competition-card-link { display: inline-flex; margin-top: 12px; align-items: center; gap: 5px; color: var(--cyan); font-size: 12px; font-weight: 650; text-decoration: none; }
 .competition-card-link svg { width: 15px; height: 15px; }
+.calendar-panel { padding: 14px 12px 12px; background: linear-gradient(135deg, #202c3b 0%, #1a202b 68%, #1b2629 100%); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow-raised); }
+.calendar-toolbar { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 8px; margin-bottom: 12px; }
+.calendar-month-button { width: 38px; height: 38px; border-radius: 13px; }
+.calendar-month-button svg { width: 19px; height: 19px; }
+.calendar-toolbar h2 { margin: 0; color: var(--text); font-size: 17px; font-weight: 720; text-align: center; text-transform: capitalize; }
+.calendar-weekdays, .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.calendar-weekdays { margin-bottom: 5px; color: var(--muted); font-size: 10px; font-weight: 700; text-align: center; }
+.calendar-day { position: relative; display: flex; min-width: 0; min-height: 43px; padding: 5px 2px 8px; align-items: center; justify-content: center; color: var(--text); background: transparent; border: 1px solid transparent; border-radius: 12px; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
+.calendar-day:hover { background: rgba(255,255,255,.055); }
+.calendar-day.is-today { color: var(--mint); border-color: rgba(101,246,202,.3); }
+.calendar-day.is-selected { color: #fff; background: rgba(101,246,202,.15); border-color: rgba(101,246,202,.65); }
+.calendar-day-markers { position: absolute; right: 0; bottom: 4px; left: 0; display: flex; justify-content: center; gap: 3px; }
+.calendar-day-dot, .calendar-legend-dot, .calendar-event-dot { display: inline-block; width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; }
+.calendar-day-dot.is-competition, .calendar-legend-dot.is-competition { background: #ff6875; box-shadow: 0 0 7px rgba(255,104,117,.5); }
+.calendar-day-dot.is-workout, .calendar-legend-dot.is-workout, .calendar-event-dot.is-workout { background: #58a6ff; box-shadow: 0 0 7px rgba(88,166,255,.48); }
+.calendar-day-spacer { min-height: 43px; }
+.calendar-legend { display: flex; margin: 11px 3px 4px; align-items: center; justify-content: flex-end; gap: 16px; }
+.calendar-legend > span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 10px; }
+.calendar-agenda-heading { display: flex; margin: 18px 2px 9px; align-items: baseline; justify-content: space-between; gap: 8px; }
+.calendar-agenda-heading h2 { margin: 0; color: var(--text); font-size: 16px; font-weight: 700; text-transform: capitalize; }
+.calendar-agenda-heading span { color: var(--muted); font-size: 11px; }
+.calendar-day-events { display: grid; gap: 8px; }
+.calendar-day-empty { margin: 0; padding: 14px 4px; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
+.calendar-event { display: grid; grid-template-columns: 56px minmax(0, 1fr) 34px; align-items: center; gap: 10px; padding: 12px 11px; background: linear-gradient(145deg, #202a39, #171d27); border: 1px solid var(--border); border-radius: 15px; }
+.calendar-event.is-profile-match { border-color: rgba(88,166,255,.9); box-shadow: 0 0 0 1px rgba(88,166,255,.24); }
+.calendar-event.is-planned-workout { border-color: rgba(88,166,255,.28); }
+.calendar-event > time { color: var(--mint); font-size: 11px; font-weight: 700; text-align: center; }
+.calendar-event.is-planned-workout > time { color: #82b8ff; }
+.calendar-event-copy { min-width: 0; }
+.calendar-event-copy h3 { margin: 0; overflow-wrap: anywhere; color: var(--text); font-size: 13px; line-height: 1.35; }
+.calendar-event-copy p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.calendar-event > a { display: grid; width: 32px; height: 32px; place-items: center; color: var(--cyan); border-radius: 10px; }
+.calendar-event > a:hover { background: rgba(98,221,255,.1); }
+.calendar-event > a svg { width: 17px; height: 17px; }
+.calendar-event-dot { justify-self: center; }
+.calendar-event-match { display: inline-flex; margin-top: 5px; align-items: center; gap: 4px; color: #82b8ff; font-size: 10px; font-weight: 650; }
+.calendar-event-match svg { width: 13px; height: 13px; }
+.calendar-planned-section { margin: 25px 0 22px; padding-top: 17px; border-top: 1px solid var(--border); }
+.calendar-planned-heading { display: flex; margin: 0 2px 13px; align-items: center; justify-content: space-between; }
+.calendar-planned-heading h2 { margin: 0; color: var(--text); font-size: 16px; font-weight: 700; }
+.calendar-planned-heading p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.calendar-plan-form { display: grid; gap: 10px; }
+.calendar-plan-field { display: grid; min-width: 0; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 650; }
+.calendar-plan-field .text-field { width: 100%; min-width: 0; margin: 0; }
+.calendar-plan-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .8fr); gap: 10px; }
+.calendar-plan-form .primary-action { width: 100%; margin-top: 2px; }
+.calendar-plan-form .primary-action:disabled { opacity: .48; cursor: not-allowed; }
+.calendar-plan-empty { display: grid; justify-items: center; gap: 10px; margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
+.calendar-plan-empty[hidden] { display: none; }
+.planned-workout-list { display: grid; gap: 8px; margin-top: 12px; }
+.planned-workout-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) 36px; align-items: center; gap: 10px; padding: 10px 11px; background: rgba(255,255,255,.025); border: 1px solid var(--border); border-radius: 14px; }
+.planned-workout-row h3 { margin: 0; color: var(--text); font-size: 12px; }
+.planned-workout-row p { margin: 3px 0 0; color: var(--muted); font-size: 10px; }
+.planned-workout-delete { width: 34px; height: 34px; color: var(--muted); border-radius: 11px; }
+.planned-workout-delete svg { width: 15px; height: 15px; }
+.calendar-status { margin: 12px 0; color: var(--muted); font-size: 12px; line-height: 1.5; text-align: center; }
+.calendar-status[hidden] { display: none; }
+.calendar-empty { display: grid; justify-items: center; gap: 10px; margin: 15px 0 24px; padding: 20px 14px; color: var(--muted); background: linear-gradient(135deg, rgba(33,46,63,.86), rgba(24,30,41,.92)); border: 1px solid var(--border); border-radius: 17px; text-align: center; }
+.calendar-empty[hidden] { display: none; }
+.calendar-empty p { margin: 0; font-size: 13px; line-height: 1.5; }
 .sport-chips { display: flex; flex-wrap: wrap; gap: 9px; margin: 8px 0 19px; }
 .sport-chips[hidden] { display: none; }
 .picker-section-label { margin: 17px 0 9px; color: var(--muted); font-size: 12px; font-weight: 650; }
@@ -819,6 +895,13 @@ h1 {
 .sport-option > span { flex: 1; }
 .sport-option > svg:last-child { width: 19px; height: 19px; color: var(--mint); }
 .sport-picker-empty { color: var(--muted); font-size: 14px; text-align: center; }
+.session-inclusion-dialog { padding-bottom: calc(26px + env(safe-area-inset-bottom)); }
+.session-inclusion-summary { margin: 0 0 8px; color: var(--mint); font-size: 14px; font-weight: 650; }
+.session-inclusion-question { margin: 0 0 18px; color: var(--text); font-size: 15px; line-height: 1.5; }
+.session-inclusion-actions { display: grid; gap: 10px; }
+.session-inclusion-actions .primary-action,
+.session-inclusion-actions .secondary-button { width: 100%; margin: 0; }
+.activity-excluded-note { display: block; margin-top: 3px; color: #ffab7b; font-size: 11px; }
 @keyframes sheet-in { from { opacity: .7; transform: translateY(36px); } to { opacity: 1; transform: translateY(0); } }
 body.sheet-open { overflow: hidden; }
 
@@ -839,6 +922,7 @@ body.sheet-open { overflow: hidden; }
 .chart-line { fill: none; stroke: #ff8748; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 5px rgba(255,135,72,.25)); }
 .chart-point circle { fill: #222733; stroke: #ff8748; stroke-width: 5; }
 .chart-point.today circle { fill: #ff8748; stroke: #ffd1b6; }
+.line-chart .chart-value { fill: #b7c3d0; font-size: 14px; font-weight: 650; }
 .line-chart .chart-day { fill: #a3afbd; font-size: 24px; }
 .line-chart .chart-day.today { fill: #ffab7b; font-weight: 700; }
 .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
@@ -1076,39 +1160,49 @@ body.keyboard-open .bottom-nav { display: none; }
 }
 
 @media (orientation: landscape) and (min-aspect-ratio: 4 / 3) and (max-height: 900px) {
-  .screen#screen-training .page-heading { margin-bottom: 2px; }
-  .screen#screen-training #today-label { display: none; }
-  .screen#screen-training #training-title { font-size: 28px; }
-  .screen#screen-training .screen-tabs { display: none; }
-  .main-content { padding-top: 2px; }
-  .timer-card {
+  body.timer-landscape-mode .app { width: 100%; max-width: 900px; }
+  body.timer-landscape-mode .topbar,
+  body.timer-landscape-mode #bottom-nav { display: none; }
+  body.timer-landscape-mode .main-content { padding: 8px 18px 12px; }
+  body.timer-landscape-mode .screen#screen-training .page-heading { display: none; }
+  body.timer-landscape-mode .timer-card {
     display: grid;
-    grid-template-columns: minmax(190px, .9fr) minmax(220px, 1.1fr);
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
-      "dial modes"
-      "dial settings"
-      "dial actions"
-      "laps laps"
-      "hint hint";
-    column-gap: 18px;
-    align-content: center;
+      "modes"
+      "dial"
+      "settings"
+      "actions"
+      "laps"
+      "hint";
+    row-gap: 8px;
+    align-content: start;
     align-items: center;
-    padding: 10px 16px 8px;
+    padding: 8px 16px;
   }
-  .timer-dial {
+  body.timer-landscape-mode .dial-mode-labels { grid-area: modes; align-self: center; }
+  body.timer-landscape-mode .timer-dial {
     grid-area: dial;
-    --dial-size: min(43svh, 238px, 34vw);
+    width: min(100%, 760px);
+    min-height: clamp(112px, 30svh, 180px);
+    aspect-ratio: auto;
     margin: 0 auto;
+    border: 1px solid rgba(255,255,255,.075);
+    border-radius: 20px;
+    box-shadow: 5px 5px 13px #0c0f13, -4px -4px 11px #252e3a;
   }
-  .dial-mode-labels { grid-area: modes; align-self: end; }
-  .timer-settings { grid-area: settings; align-self: center; margin: 5px 0 2px; }
-  .timer-actions { grid-area: actions; align-self: start; margin-top: 3px; }
-  .timer-laps { grid-area: laps; }
-  .timer-hint { grid-area: hint; margin: 5px 0 0; }
-  .timer-setting input { width: 76px; }
-  .interval-total { max-width: 252px; margin-inline: auto; }
-  .timer-laps { width: 100%; max-height: 70px; }
-  .last-session { margin-top: 6px; }
+  body.timer-landscape-mode .timer-progress { display: none; }
+  body.timer-landscape-mode .timer-center { width: 100%; padding: 12px 16px; }
+  body.timer-landscape-mode .timer-display { font-size: clamp(48px, 12svh, 80px); letter-spacing: -1px; }
+  body.timer-landscape-mode .timer-caption { display: none; }
+  body.timer-landscape-mode .timer-settings { grid-area: settings; width: 100%; flex-wrap: nowrap; margin: 0; gap: 8px; }
+  body.timer-landscape-mode .timer-setting { min-width: 0; flex: 1 1 0; text-align: center; }
+  body.timer-landscape-mode .timer-setting input { width: 100%; max-width: 142px; padding: 8px 6px; }
+  body.timer-landscape-mode .interval-total { width: min(150px, 22%); min-width: 110px; max-width: 150px; flex: 1 1 110px; margin-inline: auto; }
+  body.timer-landscape-mode .timer-actions { grid-area: actions; margin-top: 0; }
+  body.timer-landscape-mode .timer-laps { grid-area: laps; width: min(100%, 520px); max-height: 56px; margin-top: 0; }
+  body.timer-landscape-mode .timer-hint,
+  body.timer-landscape-mode #last-session { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
