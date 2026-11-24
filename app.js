@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "1.5";
+const APP_VERSION = "1.6";
 const STORAGE_KEY = "motivapp.data.v1";
 const TIMER_MODES = ["stopwatch", "interval", "countdown"];
 const MODE_LABELS = {
